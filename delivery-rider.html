@@ -213,13 +213,13 @@
   const PUSH_V = 96;              // 推车速度
   const ZONE = 40;
   const HALF_ROAD = ROAD / 2;
-  const LIGHT_PERIOD = 12.4;      // 红绿灯整周期（秒）
-  const G_T = 5.4;                // 绿灯时长
-  const Y_T = 0.8;                // 黄灯时长
-  const V_OFF = 6.2;              // 南北向相位偏移
+  const LIGHT_PERIOD = 20;        // 红绿灯整周期（秒）
+  const G_T = 8.5;                // 绿灯时长（更久，不用老等）
+  const Y_T = 1.0;                // 黄灯时长
+  const V_OFF = 10;               // 南北向相位偏移
 
-  // 只有一半路口装了信号灯（棋盘式分布），其余是普通路口
-  function isSignal(i, j) { return (i + j) % 2 === 0; }
+  // 只有三分一路口装了信号灯，且一个路口只有一盏灯
+  function isSignal(i, j) { return (i + j) % 3 === 0; }
 
   const canvas = document.getElementById('cv');
   const ctx = canvas.getContext('2d');
@@ -1623,92 +1623,78 @@
     }
   }
 
-  // 单个进口：停止线 + 实体红绿灯（灯杆、灯箱、读秒）
-  function drawApproach(bx, by, ang, col, num, big) {
+  // 一盏灯管一个路口：颜色跟着玩家所在方向，箭头指示通行方向
+  function drawSignal(lx, ly, isH, col, num, big) {
     const lit = col === COLOR_HEX.g ? 2 : col === COLOR_HEX.y ? 1 : 0;
-    const px = Math.cos(ang + Math.PI / 2);
-    const py = Math.sin(ang + Math.PI / 2);
-    const hx = bx + px * 34, hy = by + py * 34;   // 灯箱中心
 
-    // 停止线
-    ctx.save();
-    ctx.translate(bx, by);
-    ctx.rotate(ang);
-    ctx.fillStyle = hexA(col, 0.9);
-    rr(-3, -22, 6, 44, 2);
-    ctx.fill();
-    ctx.restore();
-
-    // 支架：从灯箱伸向路缘，末端一个小底座
-    ctx.save();
-    ctx.strokeStyle = '#3c4351';
-    ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(hx + px * 20, hy + py * 20);
-    ctx.lineTo(hx + px * 30, hy + py * 30);
-    ctx.stroke();
-    ctx.fillStyle = '#2b323d';
-    ctx.beginPath();
-    ctx.arc(hx + px * 31, hy + py * 31, 4.5, 0, TAU);
-    ctx.fill();
-    ctx.restore();
-
-    // 高亮：玩家正对这个灯时脉冲
     if (big) {
       const pulse = (Math.sin(clock * 6) + 1) / 2;
       ctx.strokeStyle = hexA(col, 0.28 + pulse * 0.5);
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(hx, hy, 30 + pulse * 10, 0, TAU);
+      ctx.arc(lx, ly, 34 + pulse * 10, 0, TAU);
       ctx.stroke();
     }
 
-    // 灯箱：红黄绿三灯
-    ctx.save();
-    ctx.translate(hx, hy);
-    ctx.fillStyle = 'rgba(12,16,24,0.95)';
-    rr(-9, -22, 18, 44, 6);
+    // 底座
+    ctx.fillStyle = '#3a4150';
+    ctx.beginPath();
+    ctx.arc(lx, ly + 30, 5, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = big ? hexA(col, 0.95) : 'rgba(255,255,255,0.28)';
-    ctx.lineWidth = big ? 2.2 : 1.3;
-    rr(-9, -22, 18, 44, 6);
+
+    // 灯箱
+    ctx.fillStyle = 'rgba(12,16,24,0.95)';
+    rr(lx - 11, ly - 24, 22, 48, 6);
+    ctx.fill();
+    ctx.strokeStyle = big ? hexA(col, 0.95) : 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = big ? 2.4 : 1.4;
+    rr(lx - 11, ly - 24, 22, 48, 6);
     ctx.stroke();
 
     const cols = [COLOR_HEX.r, COLOR_HEX.y, COLOR_HEX.g];
     for (let k = 0; k < 3; k++) {
-      const ly = -13 + k * 13;
+      const y = ly - 13 + k * 13;
       const on = (k === lit);
       if (on) {
         ctx.beginPath();
-        ctx.arc(0, ly, 10.5, 0, TAU);
-        ctx.fillStyle = hexA(cols[k], 0.30);
+        ctx.arc(lx, y, 11, 0, TAU);
+        ctx.fillStyle = hexA(cols[k], 0.3);
         ctx.fill();
       }
       ctx.beginPath();
-      ctx.arc(0, ly, 5.2, 0, TAU);
+      ctx.arc(lx, y, 5.6, 0, TAU);
       ctx.fillStyle = on ? cols[k] : 'rgba(255,255,255,0.09)';
       ctx.fill();
       if (on) {
         ctx.beginPath();
-        ctx.arc(-1.6, ly - 1.6, 1.7, 0, TAU);
+        ctx.arc(lx - 1.7, y - 1.7, 1.8, 0, TAU);
         ctx.fillStyle = 'rgba(255,255,255,0.85)';
         ctx.fill();
       }
     }
+
+    // 通行方向箭头（横 / 竖）
+    ctx.save();
+    ctx.translate(lx, ly + 38);
+    if (!isH) ctx.rotate(Math.PI / 2);
+    ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(-17, 0); ctx.lineTo(-9, -5.5); ctx.lineTo(-9, 5.5); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(9, -5.5); ctx.lineTo(9, 5.5); ctx.closePath(); ctx.fill();
+    rr(-9, -2.2, 18, 4.4, 2.2);
+    ctx.fill();
     ctx.restore();
 
-    // 读秒牌（挂在灯箱上方）
+    // 读秒
     if (num != null) {
-      const k = big ? 1.3 : 1;
-      const nx = hx, ny = hy - 36 * UI;
+      const k = big ? 1.35 : 1;
+      const ny = ly - 40 * UI;
       ctx.font = '800 ' + (12 * UI * k).toFixed(1) + 'px ' + FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const tw = ctx.measureText(num).width;
       const w = tw + 12 * UI * k, h = 18 * UI * k;
-      ctx.fillStyle = 'rgba(10,14,20,0.88)';
-      rr(nx - w / 2, ny - h / 2, w, h, h / 2);
+      ctx.fillStyle = 'rgba(10,14,20,0.9)';
+      rr(lx - w / 2, ny - h / 2, w, h, h / 2);
       ctx.fill();
       if (big) {
         ctx.strokeStyle = hexA(col, 0.75);
@@ -1716,7 +1702,7 @@
         ctx.stroke();
       }
       ctx.fillStyle = col;
-      ctx.fillText(num, nx, ny + 1);
+      ctx.fillText(num, lx, ny + 1);
       ctx.textBaseline = 'alphabetic';
     }
   }
@@ -1724,33 +1710,19 @@
   function drawLights() {
     const z = zoom();
     const viewW = W / (2 * z) + 140, viewH = H / (2 * z) + 140;
-    const hi = axisInfo('h'), vi = axisInfo('v');
-    const hCol = COLOR_HEX[hi.c];
-    const vCol = COLOR_HEX[vi.c];
 
-    // 先找出离玩家最近的“有灯”路口，只有它显示读秒，避免满屏数字
+    // 灯跟随玩家所在方向：你看到的就是"你的灯"
+    const myAxis = playerAxis();
+    const info = axisInfo(myAxis);
+    const col = COLOR_HEX[info.c];
+    const isH = myAxis === 'h';
+
     let ni = -1, nj = -1, nd = 1e9;
     for (let j = 0; j <= ROWS; j++) {
       for (let i = 0; i <= COLS; i++) {
         if (!isSignal(i, j)) continue;
         const d = Math.hypot(XS[i] - player.x, YS[j] - player.y);
         if (d < nd) { nd = d; ni = i; nj = j; }
-      }
-    }
-    const showNums = nd < 340;
-
-    // 玩家正对着的那个进口（用来高亮，告诉玩家"你要看这个灯"）
-    let hlIdx = -1;
-    if (ni >= 0 && nd < 300) {
-      const cx = XS[ni], cy = YS[nj];
-      const sp = Math.hypot(player.vx, player.vy);
-      const inside = Math.abs(player.x - cx) < 46 && Math.abs(player.y - cy) < 46;
-      if (sp > 25 && !inside) {
-        if (Math.abs(player.vx) > Math.abs(player.vy)) {
-          hlIdx = player.x < cx ? 0 : 1;
-        } else {
-          hlIdx = player.y < cy ? 2 : 3;
-        }
       }
     }
 
@@ -1760,23 +1732,14 @@
         const cx = XS[i], cy = YS[j];
         if (Math.abs(cx - cam.x) > viewW || Math.abs(cy - cam.y) > viewH) continue;
 
-        // 离玩家越远，箭头越淡，避免满屏花花绿绿
         const d = Math.hypot(cx - player.x, cy - player.y);
-        ctx.globalAlpha = clamp(1.2 - d / 820, 0.28, 1);
+        ctx.globalAlpha = clamp(1.15 - d / 900, 0.3, 1);
 
-        const near = showNums && i === ni && j === nj;
-        const isHl = near && hlIdx >= 0;
-        const hNum = near ? String(Math.ceil(hi.left)) : null;
-        const vNum = near ? String(Math.ceil(vi.left)) : null;
+        const near = (i === ni && j === nj && nd < 360);
+        const num = near ? String(Math.ceil(info.left)) : null;
 
-        // 东行（+x）：右车道在下方，停止线在路口西侧
-        drawApproach(cx - 56, cy + 24, 0, hCol, hNum, isHl && hlIdx === 0);
-        // 西行（-x）：停止线在路口东侧
-        drawApproach(cx + 56, cy - 24, Math.PI, hCol, hNum, isHl && hlIdx === 1);
-        // 南行（+y）：停止线在路口北侧
-        drawApproach(cx - 24, cy - 56, Math.PI / 2, vCol, vNum, isHl && hlIdx === 2);
-        // 北行（-y）：停止线在路口南侧
-        drawApproach(cx + 24, cy + 56, -Math.PI / 2, vCol, vNum, isHl && hlIdx === 3);
+        // 灯柱放在路口一角
+        drawSignal(cx - 58, cy - 58, isH, col, num, near);
       }
     }
     ctx.globalAlpha = 1;
