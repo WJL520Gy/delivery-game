@@ -226,7 +226,7 @@
   const TOUCH = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
   let W = 0, H = 0, DPR = 1, UI = 1;
 
-  const zoom = () => clamp(Math.min(W / 1010, H / 655), 0.6, 1.55);
+  const zoom = () => clamp(Math.min(W / 1010, H / 655), 0.72, 1.55);
 
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -1258,17 +1258,28 @@
       cam.tx = WORLD_W / 2 + Math.cos(t) * 320;
       cam.ty = WORLD_H / 2 + Math.sin(t * 1.25) * 240;
     } else {
-      cam.tx = player.x + player.vx * 0.2;
-      cam.ty = player.y + player.vy * 0.2;
+      cam.tx = player.x + player.vx * 0.18;
+      cam.ty = player.y + player.vy * 0.18;
     }
     const k = 1 - Math.exp(-(state === 'menu' ? 2.4 : 7) * dt);
     cam.x = lerp(cam.x, cam.tx, k);
     cam.y = lerp(cam.y, cam.ty, k);
 
+    // 允许镜头越过城市边界约 240，这样就算开到地图最边上，
+    // 车也仍然在画面中间，不会被挤到屏幕角落或被 HUD 挡住。
     const z = zoom();
     const halfW = W / (2 * z), halfH = H / (2 * z);
-    cam.x = WORLD_W <= halfW * 2 ? WORLD_W / 2 : clamp(cam.x, halfW, WORLD_W - halfW);
-    cam.y = WORLD_H <= halfH * 2 ? WORLD_H / 2 : clamp(cam.y, halfH, WORLD_H - halfH);
+    const OVER = 240;
+    if (WORLD_W <= halfW * 2) {
+      cam.x = WORLD_W / 2;
+    } else {
+      cam.x = clamp(cam.x, halfW - OVER, WORLD_W - halfW + OVER);
+    }
+    if (WORLD_H <= halfH * 2) {
+      cam.y = WORLD_H / 2;
+    } else {
+      cam.y = clamp(cam.y, halfH - OVER, WORLD_H - halfH + OVER);
+    }
   }
 
   function update(dt) {
@@ -1304,8 +1315,14 @@
   function drawGround() {
     let road = '#383d47';
     if (wx.rain || wx.snow) road = '#333843';
+
+    // 城外：镜头越界时会看到，用更暗的底色，避免出现黑边
+    ctx.fillStyle = wx.rain || wx.snow ? '#20242c' : '#252a33';
+    ctx.fillRect(-1600, -1600, WORLD_W + 3200, WORLD_H + 3200);
+
+    // 城内路面
     ctx.fillStyle = road;
-    ctx.fillRect(-260, -260, WORLD_W + 520, WORLD_H + 520);
+    ctx.fillRect(-6, -6, WORLD_W + 12, WORLD_H + 12);
 
     ctx.strokeStyle = 'rgba(235,240,250,0.20)';
     ctx.lineWidth = 3;
@@ -1857,7 +1874,7 @@
      绘制：HUD
   ========================================================= */
   function panel(x, y, w, h, r) {
-    ctx.fillStyle = 'rgba(14,18,26,0.72)';
+    ctx.fillStyle = 'rgba(14,18,26,0.62)';
     rr(x, y, w, h, r || 14);
     ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
@@ -1948,7 +1965,7 @@
     let cw, ch, cx0, cy0;
     if (narrow) {
       cw = W - 24 * UI;
-      ch = 62 * UI;
+      ch = 58 * UI;
       cx0 = 12 * UI;
       cy0 = py + ph + 12 * UI;
     } else {
