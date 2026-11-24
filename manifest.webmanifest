@@ -1,0 +1,20 @@
+{
+  "name": "极速外卖 · 骑手日记",
+  "short_name": "极速外卖",
+  "description": "红灯、雨天和算法之间的外卖骑手小游戏",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "./delivery-rider.html",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen"],
+  "orientation": "any",
+  "background_color": "#0b0e14",
+  "theme_color": "#0b0e14",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
