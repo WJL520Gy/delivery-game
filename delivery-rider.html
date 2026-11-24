@@ -321,6 +321,7 @@
   let muted = false;
   let hurryCd = 0;
   let actionBtn = null, rejectBtn = null;
+  let msgButtons = [];
   let flashT = 0;
   let ev = { next: 14, dog: null };
 
@@ -665,7 +666,8 @@
       lastSec: Math.ceil(timeLimit),
       base,
       wait: 0, waitMax: 1,
-      nextCall: 0, callT: 0, annoy: 0,
+      nextMsg: 0, msg: null, annoy: 0,
+      errand: { active: false, done: false, x: 0, y: 0, fee: 0, wait: 0 },
       brokeOnce: false
     };
     if (junk) {
@@ -697,8 +699,8 @@
 
   function pickedUp() {
     order.state = 'deliver';
-    order.nextCall = rand(4.5, 9);
-    order.callT = 0;
+    order.nextMsg = rand(4.5, 9);
+    order.msg = null;
     sfx('pickup');
     ring(order.pickup.x, order.pickup.y, '#ff9f43');
     burst(order.pickup.x, order.pickup.y, 10, '#ffd8a8', 0.6);
@@ -721,10 +723,63 @@
     addText(player.x, player.y - 46, '商家：马上好！', '#ffd8a8', 0.9);
   }
 
-  function answerCall() {
-    if (!order || order.callT <= 0) return;
-    order.callT = 0;
-    order.nextCall = rand(7, 13);
+  // 顾客偶尔会发消息：催单，或者让你顺路带点东西
+  function triggerMessage() {
+    if (!order || order.state !== 'deliver') return;
+    const canErrand = !order.errand.active && !order.errand.done;
+    if (canErrand && Math.random() < 0.38) {
+      const fee = randInt(8, 20);
+      order.msg = {
+        kind: 'errand',
+        text: pick(['师傅能帮我带包烟吗？', '顺路帮我带瓶水行不？', '能帮我带盒药吗？', '帮我带份炒饭呗？']),
+        t: 10,
+        fee: fee
+      };
+    } else {
+      order.msg = {
+        kind: 'nudge',
+        text: pick(['到哪了师傅？', '还要多久呀？', '我快迟到了…', '师傅快点，我等不及了']),
+        t: 9
+      };
+    }
+    sfx('call');
+  }
+
+  function nearestShopDoor() {
+    let best = null, bd = 1e9;
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (b.type !== 'build' || !b.door) continue;
+      const d = Math.hypot(b.door.x - player.x, b.door.y - player.y);
+      if (d < bd) { bd = d; best = b.door; }
+    }
+    return best || { x: player.x, y: player.y };
+  }
+
+  function acceptErrand() {
+    if (!order || !order.msg || order.msg.kind !== 'errand') return;
+    const shop = nearestShopDoor();
+    order.errand = { active: true, done: false, x: shop.x, y: shop.y, fee: order.msg.fee, wait: 0 };
+    order.msg = null;
+    order.nextMsg = rand(10, 16);
+    sfx('bell');
+    addText(player.x, player.y - 50, '好嘞，顺路带上', '#8ce99a', 1.05);
+  }
+
+  function declineErrand() {
+    if (!order || !order.msg || order.msg.kind !== 'errand') return;
+    order.annoy++;
+    order.msg = null;
+    order.nextMsg = rand(10, 16);
+    sfx('hang');
+    addText(player.x, player.y - 50, '顾客：那算了…', '#ff8787', 0.95);
+  }
+
+  function replyMsg() {
+    if (!order || !order.msg) return;
+    if (order.msg.kind === 'errand') { acceptErrand(); return; }
+    order.msg = null;
+    order.nextMsg = rand(9, 15);
     sfx('call');
     addText(player.x, player.y - 48, '已回复：马上到！', '#a5d8ff', 0.9);
   }
@@ -747,15 +802,26 @@
     if (combo > bestCombo) bestCombo = combo;
     const mult = 1 + 0.1 * Math.min(combo - 1, 6);
     const pay = Math.max(1, Math.round((order.base + tip) * mult));
+    let bonus = 0;
+    if (order.errand.active) {
+      if (order.errand.done) {
+        bonus = order.errand.fee;
+        mood = clamp(mood + 6, 0, 100);
+      } else {
+        order.annoy++;
+      }
+    }
+    const total = pay + bonus;
 
-    money += pay;
+    money += total;
     ordersDone++;
     if (order.annoy >= 2) complaints++;
     mood = clamp(mood + 7, 0, 100);
 
     ring(order.drop.x, order.drop.y, '#63e6be');
     burst(order.drop.x, order.drop.y, 22, '#63e6be', 1);
-    addText(order.drop.x, order.drop.y - 44, '+¥' + pay, '#8ce99a', 1.4);
+    addText(order.drop.x, order.drop.y - 44, '+¥' + total, '#8ce99a', 1.4);
+    if (bonus > 0) addText(order.drop.x, order.drop.y - 70, '带东西小费 +¥' + bonus, '#ffd166', 0.95, 0.3);
     if (combo >= 2) addText(order.drop.x, order.drop.y - 72, '连击 x' + combo, '#ffd166', 1.2);
     if (order.annoy >= 2) addText(order.drop.x, order.drop.y - 98, '顾客：下次别接了', '#ff8787', 0.95);
     sfx('deliver');
@@ -961,8 +1027,8 @@
   function doAction() {
     if (state !== 'playing' || !order) return;
     if (bikeDown > 0) { kickBike(); return; }
+    if (order.msg) { replyMsg(); return; }
     if (order.state === 'waiting') hurry();
-    else if (order.callT > 0) answerCall();
   }
 
   window.addEventListener('keydown', (e) => {
@@ -994,6 +1060,16 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state !== 'playing') return;
+    for (let i = 0; i < msgButtons.length; i++) {
+      const b = msgButtons[i];
+      if (hitBox(b, e.clientX, e.clientY)) {
+        if (b.act === 'take') acceptErrand();
+        else if (b.act === 'skip') declineErrand();
+        else replyMsg();
+        e.preventDefault();
+        return;
+      }
+    }
     if (hitBox(actionBtn, e.clientX, e.clientY)) { doAction(); e.preventDefault(); return; }
     if (hitBox(rejectBtn, e.clientX, e.clientY)) { rejectOrder(); e.preventDefault(); return; }
 
@@ -1403,18 +1479,34 @@
 
     if (Math.hypot(player.x - order.drop.x, player.y - order.drop.y) < ZONE) { deliver(); return; }
 
-    if (order.callT > 0) {
-      order.callT -= dt;
-      if (order.callT <= 0) {
+    // 顾客消息（发微信催单，不再打电话）
+    if (order.msg) {
+      order.msg.t -= dt;
+      if (order.msg.t <= 0) {
         order.annoy++;
         mood = clamp(mood - 3, 0, 100);
         sfx('hang');
-        addText(player.x, player.y - 56, '顾客挂断了', '#ff8787', 0.95);
-        order.nextCall = rand(7, 13);
+        addText(player.x, player.y - 56,
+          order.msg.kind === 'errand' ? '顾客：那算了…' : '顾客：怎么不回我', '#ff8787', 0.95);
+        order.msg = null;
+        order.nextMsg = rand(9, 15);
       }
     } else {
-      order.nextCall -= dt;
-      if (order.nextCall <= 0) { order.callT = 5; sfx('call'); }
+      order.nextMsg -= dt;
+      if (order.nextMsg <= 0) triggerMessage();
+    }
+
+    // 顺路带东西：到店门口停 1.2 秒
+    if (order.errand.active && !order.errand.done) {
+      if (Math.hypot(player.x - order.errand.x, player.y - order.errand.y) < ZONE) {
+        order.errand.wait += dt;
+        if (order.errand.wait > 1.2) {
+          order.errand.done = true;
+          sfx('bell');
+          addText(player.x, player.y - 52, '买好了', '#8ce99a', 1.05);
+          addText(player.x, player.y - 78, '小费 +¥' + order.errand.fee, '#ffd166', 0.9, 0.4);
+        }
+      }
     }
   }
 
@@ -1817,10 +1909,22 @@
     ctx.textBaseline = 'alphabetic';
   }
 
+  function orderTarget() {
+    if (order.errand.active && !order.errand.done) {
+      return { x: order.errand.x, y: order.errand.y, kind: 'errand' };
+    }
+    if (order.state === 'deliver') return { x: order.drop.x, y: order.drop.y, kind: 'drop' };
+    return { x: order.pickup.x, y: order.pickup.y, kind: 'pickup' };
+  }
+
+  function targetColor(kind) {
+    return kind === 'drop' ? '#4dabf7' : kind === 'errand' ? '#ffd166' : '#ff9f43';
+  }
+
   function drawGuide() {
     if (!order || state !== 'playing') return;
-    const t = order.state === 'deliver' ? order.drop : order.pickup;
-    const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+    const t = orderTarget();
+    const col = targetColor(t.kind);
 
     ctx.save();
     ctx.strokeStyle = hexA(col, 0.34);
@@ -1836,9 +1940,9 @@
 
   function drawGoals() {
     if (!order) return;
-    const t = order.state === 'deliver' ? order.drop : order.pickup;
-    const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
-    drawBeacon(t.x, t.y, col, order.state === 'deliver' ? '送' : '取');
+    const t = orderTarget();
+    const col = targetColor(t.kind);
+    drawBeacon(t.x, t.y, col, t.kind === 'drop' ? '送' : t.kind === 'errand' ? '买' : '取');
   }
 
   function drawWaitGauge() {
@@ -2320,7 +2424,7 @@
     ctx.textAlign = 'left';
     ctx.fillText(label, cx0 + 38 * UI, cy0 + 29 * UI);
 
-    const tgt = order.state === 'deliver' ? order.drop : order.pickup;
+    const tgt = orderTarget();
     const meters = Math.max(1, Math.round(Math.hypot(player.x - tgt.x, player.y - tgt.y) / 9));
     ctx.textAlign = 'right';
     ctx.fillStyle = '#9aa4b2';
@@ -2364,24 +2468,65 @@
     ctx.fillText((pushing ? '推 ' : '') + Math.round(spd) + ' km/h', W / 2, sy2 + sh / 2 + 1);
     ctx.textBaseline = 'alphabetic';
 
-    /* ---- 顾客来电 ---- */
-    if (order.callT > 0) {
-      const bw2 = Math.min(300 * UI, W - 40 * UI);
-      const bh2 = 46 * UI;
+    /* ---- 顾客消息 ---- */
+    msgButtons = [];
+    if (order.msg) {
+      const m = order.msg;
+      const isErrand = m.kind === 'errand';
+      const bw2 = Math.min(330 * UI, W - 32 * UI);
+      const bh2 = (isErrand ? 104 : 74) * UI;
       const bx2 = W / 2 - bw2 / 2;
       const by2 = narrow ? (cy0 + ch + 52 * UI) : (cy0 + ch + 10 * UI);
-      ctx.fillStyle = 'rgba(30,44,68,0.92)';
-      rr(bx2, by2, bw2, bh2, 12 * UI); ctx.fill();
+
+      ctx.fillStyle = 'rgba(26,36,54,0.95)';
+      rr(bx2, by2, bw2, bh2, 14 * UI); ctx.fill();
       hudBoxes.call = { x: bx2, y: by2, w: bw2, h: bh2 };
-      ctx.strokeStyle = 'rgba(120,180,255,0.55)';
-      ctx.lineWidth = 1.5; ctx.stroke();
-      ctx.fillStyle = '#a5d8ff';
+      ctx.strokeStyle = isErrand ? 'rgba(255,200,90,0.6)' : 'rgba(120,180,255,0.55)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      // 消息头
+      ctx.fillStyle = isErrand ? '#ffd166' : '#a5d8ff';
       ctx.textAlign = 'left';
-      ctx.font = '700 ' + (13.5 * UI).toFixed(1) + 'px ' + FONT;
-      ctx.fillText('顾客来电：到哪了？', bx2 + 14 * UI, by2 + 20 * UI);
-      ctx.fillStyle = '#8b98a8';
-      ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
-      ctx.fillText('按 E / 点这里 接听', bx2 + 14 * UI, by2 + 36 * UI);
+      ctx.font = '700 ' + (11.5 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText(isErrand ? '顾客发来消息 · 顺路带东西' : '顾客发来消息', bx2 + 14 * UI, by2 + 18 * UI);
+
+      // 内容
+      ctx.fillStyle = '#e8edf5';
+      ctx.font = '700 ' + (14 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText(m.text, bx2 + 14 * UI, by2 + (isErrand ? 40 : 42) * UI);
+
+      if (isErrand) {
+        const b1 = { x: bx2 + 14 * UI, y: by2 + 54 * UI, w: 116 * UI, h: 36 * UI, act: 'take' };
+        const b2 = { x: bx2 + 140 * UI, y: by2 + 54 * UI, w: 88 * UI, h: 36 * UI, act: 'skip' };
+        ctx.fillStyle = 'rgba(255,140,66,0.95)';
+        rr(b1.x, b1.y, b1.w, b1.h, 10 * UI); ctx.fill();
+        ctx.fillStyle = '#20140a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '800 ' + (13.5 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText('带 · 小费 ¥' + m.fee, b1.x + b1.w / 2, b1.y + b1.h / 2 + 1);
+
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        rr(b2.x, b2.y, b2.w, b2.h, 10 * UI); ctx.fill();
+        ctx.fillStyle = '#cbd5e1';
+        ctx.font = '700 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText('不带', b2.x + b2.w / 2, b2.y + b2.h / 2 + 1);
+        ctx.textBaseline = 'alphabetic';
+
+        msgButtons = [b1, b2];
+      } else {
+        const b1 = { x: bx2 + bw2 - 104 * UI, y: by2 + bh2 - 40 * UI, w: 90 * UI, h: 30 * UI, act: 'reply' };
+        ctx.fillStyle = 'rgba(77,171,247,0.9)';
+        rr(b1.x, b1.y, b1.w, b1.h, 9 * UI); ctx.fill();
+        ctx.fillStyle = '#0b1622';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = '800 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText('回复', b1.x + b1.w / 2, b1.y + b1.h / 2 + 1);
+        ctx.textBaseline = 'alphabetic';
+        msgButtons = [b1];
+      }
     }
 
     /* ---- 操作按钮 ---- */
@@ -2390,7 +2535,7 @@
     let actLabel = null;
     if (bikeDown > 0) actLabel = '踹车';
     else if (order.state === 'waiting') actLabel = '催单';
-    else if (order.callT > 0) actLabel = '接听';
+    else if (order.msg) actLabel = order.msg.kind === 'errand' ? '带上' : '回复';
 
     if (actLabel) {
       const aw = (narrow ? 150 : 118) * UI;
@@ -2498,8 +2643,8 @@
     }
 
     if (order) {
-      const t = order.state === 'deliver' ? order.drop : order.pickup;
-      ctx.fillStyle = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+      const t = orderTarget();
+      ctx.fillStyle = targetColor(t.kind);
       ctx.beginPath(); ctx.arc(t.x, t.y, 4.5 / s, 0, TAU); ctx.fill();
     }
 
@@ -2511,8 +2656,8 @@
 
   function drawOffscreenArrow() {
     if (!order || state !== 'playing') return;
-    const t = order.state === 'deliver' ? order.drop : order.pickup;
-    const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+    const t = orderTarget();
+    const col = targetColor(t.kind);
     const z = zoom();
     const sx = (t.x - cam.x) * z + W / 2;
     const sy = (t.y - cam.y) * z + H / 2;
