@@ -492,7 +492,7 @@
 
     return {
       axis: ln.axis, fixed: ln.fixed, dir: ln.dir, t,
-      speed: rand(95, 172), v: 0,
+      speed: rand(80, 145), v: 0,
       color: pick(CAR_COLORS)
     };
   }
@@ -540,7 +540,7 @@
     if (!to.door) to.door = makeDoor(to);
 
     // 系统乱派单：越到后面越容易派垃圾单
-    const junkChance = clamp(0.16 + ordersDone * 0.02, 0.16, 0.4);
+    const junkChance = clamp(0.08 + ordersDone * 0.012, 0.08, 0.22);
     const junk = Math.random() < junkChance && ordersDone >= 2;
 
     const route =
@@ -548,7 +548,7 @@
       Math.hypot(from.door.x - to.door.x, from.door.y - to.door.y);
 
     const diff = clamp(1 - 0.011 * ordersDone, 0.72, 1);
-    const timeLimit = clamp(route / 230 + 18, 23, 62) * diff;
+    const timeLimit = clamp(route / 205 + 24, 30, 80) * diff;
     const centerDist = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
     let base = 6 + Math.round(centerDist / 110);
     if (junk) base = Math.max(3, Math.round(base * 0.55));
@@ -616,7 +616,7 @@
     hurryCd = 1.15;
     order.wait = Math.max(0, order.wait - 0.85);
     order.hurried = (order.hurried || 0) + 1;
-    mood = clamp(mood - 0.6, 0, 100);
+    mood = clamp(mood - 0.4, 0, 100);
     sfx('bell');
     addText(player.x, player.y - 46, '商家：马上好！', '#ffd8a8', 0.9);
   }
@@ -668,7 +668,7 @@
   function failOrder() {
     lives--;
     combo = 0;
-    mood = clamp(mood - 20, 0, 100);
+    mood = clamp(mood - 14, 0, 100);
     shake(13);
     sfx('fail');
     const why = order.state === 'waiting' ? '卡餐 · 超时' : '超时 · 差评';
@@ -949,7 +949,7 @@
       player.vx *= 0.15; player.vy *= 0.15;
       if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 2.5);
       falls++;
-      mood = clamp(mood - 12, 0, 100);
+      mood = clamp(mood - 8, 0, 100);
       shake(20);
       sfx('fall');
       burst(player.x, player.y, 18, '#cfd8e3', 1.1);
@@ -1016,7 +1016,7 @@
 
     // 电量消耗
     if (!pushing) {
-      battery -= (0.22 + (sp / MAXV) * 0.62) * dt;
+      battery -= (0.12 + (sp / MAXV) * 0.40) * dt;
       if (battery <= 0) {
         battery = 0;
         pushing = true;
@@ -1036,7 +1036,7 @@
       const centers = c.axis === 'h' ? XS : YS;
       const front = c.t + c.dir * 29;
       let target = c.speed;
-      if (wx.rain || wx.snow) target *= 0.82;
+      if (wx.rain || wx.snow) target *= 0.75;
 
       if (!green) {
         let best = Infinity;
@@ -1084,8 +1084,8 @@
     player.vx = nx * 420;
     player.vy = ny * 420;
 
-    if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 1.8);
-    mood = clamp(mood - 8, 0, 100);
+    if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 1.2);
+    mood = clamp(mood - 6, 0, 100);
     shake(15);
     sfx('crash');
     addText(player.x, player.y - 34, '被车撞了！', '#ff6b6b', 1.1);
@@ -1125,7 +1125,7 @@
     if (info.c !== 'r') return;   // 黄灯也放行，别太苛刻
 
     violations++;
-    mood = clamp(mood - 4, 0, 100);
+    mood = clamp(mood - 3, 0, 100);
     if (Math.random() < 0.18) {
       const f = 10;
       fines += f;
@@ -1147,7 +1147,7 @@
     // 最忙的时候抛锚：越接近超时越容易
     if (order && order.state === 'deliver' && !order.brokeOnce) {
       const urgency = 1 - clamp(order.timeLeft / order.timeLimit, 0, 1);
-      if (urgency > 0.55 && Math.random() < dt * 0.008 * (0.6 + urgency)) {
+      if (urgency > 0.7 && Math.random() < dt * 0.004 * (0.6 + urgency)) {
         order.brokeOnce = true;
         bikeDown = 4.4;
         player.vx *= 0.15; player.vy *= 0.15;
@@ -1202,7 +1202,7 @@
     if (heatT > 0) { heatT -= dt; return; }
     if (Math.random() < dt * 0.1) {
       heatT = 1.6;
-      mood = clamp(mood - 4, 0, 100);
+      mood = clamp(mood - 3, 0, 100);
       addText(player.x, player.y - 44, '眼前有点发黑', '#ffb86b', 1.0);
     }
   }
@@ -1241,7 +1241,7 @@
       order.callT -= dt;
       if (order.callT <= 0) {
         order.annoy++;
-        mood = clamp(mood - 5, 0, 100);
+        mood = clamp(mood - 3, 0, 100);
         sfx('hang');
         addText(player.x, player.y - 56, '顾客挂断了', '#ff8787', 0.95);
         order.nextCall = rand(7, 13);
@@ -1409,7 +1409,19 @@
   }
 
   // 单个方向的路口引导：停止线 + 路面箭头 + 读秒
-  function drawApproach(bx, by, ang, col, num) {
+  function drawApproach(bx, by, ang, col, num, big) {
+    // 高亮：玩家正对的那个进口加一圈脉冲，避免"看错灯"
+    if (big) {
+      const pulse = (Math.sin(clock * 6) + 1) / 2;
+      ctx.save();
+      ctx.strokeStyle = hexA(col, 0.35 + pulse * 0.45);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(bx, by, 26 + pulse * 10, 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(bx, by);
     ctx.rotate(ang);
@@ -1436,16 +1448,22 @@
 
     // 读秒牌（不随箭头旋转，方便读）
     if (num != null) {
-      const px = bx + Math.cos(ang + Math.PI / 2) * 30;
-      const py = by + Math.sin(ang + Math.PI / 2) * 30;
-      ctx.font = '800 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
+      const k = big ? 1.45 : 1;
+      const px = bx + Math.cos(ang + Math.PI / 2) * (30 * k);
+      const py = by + Math.sin(ang + Math.PI / 2) * (30 * k);
+      ctx.font = '800 ' + (12.5 * UI * k).toFixed(1) + 'px ' + FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const tw = ctx.measureText(num).width;
-      const w = tw + 12 * UI, h = 19 * UI;
-      ctx.fillStyle = 'rgba(10,14,20,0.80)';
+      const w = tw + 12 * UI * k, h = 19 * UI * k;
+      ctx.fillStyle = 'rgba(10,14,20,0.88)';
       rr(px - w / 2, py - h / 2, w, h, h / 2);
       ctx.fill();
+      if (big) {
+        ctx.strokeStyle = hexA(col, 0.75);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
       ctx.fillStyle = col;
       ctx.fillText(num, px, py + 1);
       ctx.textBaseline = 'alphabetic';
@@ -1470,6 +1488,21 @@
     }
     const showNums = nd < 340;
 
+    // 玩家正对着的那个进口（用来高亮，告诉玩家"你要看这个灯"）
+    let hlIdx = -1;
+    if (ni >= 0 && nd < 300) {
+      const cx = XS[ni], cy = YS[nj];
+      const sp = Math.hypot(player.vx, player.vy);
+      const inside = Math.abs(player.x - cx) < 46 && Math.abs(player.y - cy) < 46;
+      if (sp > 25 && !inside) {
+        if (Math.abs(player.vx) > Math.abs(player.vy)) {
+          hlIdx = player.x < cx ? 0 : 1;
+        } else {
+          hlIdx = player.y < cy ? 2 : 3;
+        }
+      }
+    }
+
     for (let j = 0; j <= ROWS; j++) {
       for (let i = 0; i <= COLS; i++) {
         if (!isSignal(i, j)) continue;
@@ -1481,17 +1514,18 @@
         ctx.globalAlpha = clamp(1.2 - d / 820, 0.28, 1);
 
         const near = showNums && i === ni && j === nj;
+        const isHl = near && hlIdx >= 0;
         const hNum = near ? String(Math.ceil(hi.left)) : null;
         const vNum = near ? String(Math.ceil(vi.left)) : null;
 
         // 东行（+x）：右车道在下方，停止线在路口西侧
-        drawApproach(cx - 56, cy + 24, 0, hCol, hNum);
+        drawApproach(cx - 56, cy + 24, 0, hCol, hNum, isHl && hlIdx === 0);
         // 西行（-x）：停止线在路口东侧
-        drawApproach(cx + 56, cy - 24, Math.PI, hCol, hNum);
+        drawApproach(cx + 56, cy - 24, Math.PI, hCol, hNum, isHl && hlIdx === 1);
         // 南行（+y）：停止线在路口北侧
-        drawApproach(cx - 24, cy - 56, Math.PI / 2, vCol, vNum);
+        drawApproach(cx - 24, cy - 56, Math.PI / 2, vCol, vNum, isHl && hlIdx === 2);
         // 北行（-y）：停止线在路口南侧
-        drawApproach(cx + 24, cy + 56, -Math.PI / 2, vCol, vNum);
+        drawApproach(cx + 24, cy + 56, -Math.PI / 2, vCol, vNum, isHl && hlIdx === 3);
       }
     }
     ctx.globalAlpha = 1;
@@ -1499,8 +1533,23 @@
 
   function drawBeacon(x, y, color, label) {
     const pulse = (Math.sin(clock * 4.2) + 1) / 2;
+    const dist = Math.max(1, Math.round(Math.hypot(player.x - x, player.y - y) / 9));
 
-    ctx.strokeStyle = hexA(color, 0.30);
+    // 光柱：远处也能看到目标
+    const g = ctx.createLinearGradient(x, y - 160, x, y);
+    g.addColorStop(0, hexA(color, 0));
+    g.addColorStop(1, hexA(color, 0.18));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x - 22, y);
+    ctx.lineTo(x - 9, y - 160);
+    ctx.lineTo(x + 9, y - 160);
+    ctx.lineTo(x + 22, y);
+    ctx.closePath();
+    ctx.fill();
+
+    // 判定圈
+    ctx.strokeStyle = hexA(color, 0.35);
     ctx.lineWidth = 2.5;
     ctx.setLineDash([7, 9]);
     ctx.beginPath();
@@ -1508,41 +1557,50 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    ctx.strokeStyle = hexA(color, 0.45 * (1 - pulse));
-    ctx.lineWidth = 3;
+    // 外扩光环
+    ctx.strokeStyle = hexA(color, 0.5 * (1 - pulse));
+    ctx.lineWidth = 4;
     ctx.beginPath();
-    ctx.arc(x, y, 20 + pulse * 18, 0, TAU);
+    ctx.arc(x, y, 24 + pulse * 22, 0, TAU);
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';
     ctx.beginPath();
-    ctx.ellipse(x, y + 3, 14, 7, 0, 0, TAU);
+    ctx.ellipse(x, y + 4, 16, 8, 0, 0, TAU);
     ctx.fill();
 
     ctx.save();
-    ctx.translate(x, y - 30 - Math.sin(clock * 3) * 3);
+    ctx.translate(x, y - 36 - Math.sin(clock * 3) * 4);
 
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.moveTo(-7, 12);
-    ctx.lineTo(7, 12);
-    ctx.lineTo(0, 24);
+    ctx.moveTo(-9, 15);
+    ctx.lineTo(9, 15);
+    ctx.lineTo(0, 30);
     ctx.closePath();
     ctx.fill();
 
     ctx.beginPath();
-    ctx.arc(0, 0, 17, 0, TAU);
+    ctx.arc(0, 0, 21, 0, TAU);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+    ctx.lineWidth = 3.5;
     ctx.stroke();
 
     ctx.fillStyle = '#1b1205';
-    ctx.font = 'bold 17px ' + FONT;
+    ctx.font = 'bold 21px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(label, 0, 1);
     ctx.restore();
+
+    // 距离
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.font = '700 ' + (12 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(dist + 'm', x, y - 68);
+    ctx.textBaseline = 'alphabetic';
   }
 
   function drawGuide() {
@@ -1551,8 +1609,8 @@
     const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
 
     ctx.save();
-    ctx.strokeStyle = hexA(col, 0.22);
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = hexA(col, 0.34);
+    ctx.lineWidth = 4;
     ctx.setLineDash([11, 15]);
     ctx.lineDashOffset = -clock * 46;
     ctx.beginPath();
@@ -2023,25 +2081,29 @@
     else if (order.callT > 0) actLabel = '接听';
 
     if (actLabel) {
-      const aw = 118 * UI, ah = 42 * UI;
+      const aw = (narrow ? 150 : 118) * UI;
+      const ah = (narrow ? 58 : 42) * UI;
       const ax = W / 2 - aw / 2;
-      const ay = H - 104 * UI;
+      const ay = H - (narrow ? 112 : 104) * UI;
       const ready = bikeDown > 0 ? kickCd <= 0 : (order.state === 'waiting' ? hurryCd <= 0 : true);
-      ctx.fillStyle = ready ? 'rgba(255,140,66,0.92)' : 'rgba(120,130,145,0.55)';
-      rr(ax, ay, aw, ah, 12 * UI); ctx.fill();
+      ctx.fillStyle = ready ? 'rgba(255,140,66,0.95)' : 'rgba(120,130,145,0.55)';
+      rr(ax, ay, aw, ah, (narrow ? 18 : 12) * UI); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       ctx.fillStyle = '#20140a';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = '800 ' + (15 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.font = '800 ' + (narrow ? 19 : 15) * UI + 'px ' + FONT;
       ctx.fillText(actLabel, W / 2, ay + ah / 2 + 1);
       ctx.textBaseline = 'alphabetic';
       actionBtn = { x: ax, y: ay, w: aw, h: ah };
     }
 
     if (order.junk && order.rejectT > 0 && order.state === 'pickup') {
-      const rw = 96 * UI, rh = 34 * UI;
+      const rw = (narrow ? 130 : 96) * UI, rh = (narrow ? 44 : 34) * UI;
       const rx = W / 2 - rw / 2;
-      const ry = H - 158 * UI;
+      const ry = H - (narrow ? 176 : 158) * UI;
       ctx.fillStyle = 'rgba(40,20,24,0.9)';
       rr(rx, ry, rw, rh, 10 * UI); ctx.fill();
       ctx.strokeStyle = 'rgba(255,107,107,0.6)';
@@ -2093,7 +2155,7 @@
   }
 
   function drawMinimap() {
-    const mw = Math.min(168 * UI, W * 0.28);
+    const mw = Math.min(168 * UI, W * 0.24);
     const mh = mw * WORLD_H / WORLD_W;
     const mx = W - mw - 14 * UI, my = H - mh - 14 * UI;
 
@@ -2192,20 +2254,34 @@
   }
 
   function drawStick() {
+    if (state !== 'playing') return;
+
+    // 触屏设备：没在操作时显示一个固定底座，让玩家知道往哪拖
+    if (TOUCH && !stick) {
+      const bx = 92 * UI, by = H - 92 * UI, r = 62 * UI;
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.20)';
+      ctx.beginPath(); ctx.arc(bx, by, 22 * UI, 0, TAU); ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (!stick) return;
     const dx0 = stick.x - stick.ox, dy0 = stick.y - stick.oy;
     const m = Math.hypot(dx0, dy0);
-    const lim = 56;
+    const lim = 62;
     let dx = dx0, dy = dy0;
     if (m > lim) { dx = dx0 / m * lim; dy = dy0 / m * lim; }
 
     ctx.save();
-    ctx.globalAlpha = 0.42;
+    ctx.globalAlpha = 0.5;
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(stick.ox, stick.oy, lim, 0, TAU); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.beginPath(); ctx.arc(stick.ox + dx, stick.oy + dy, 24, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(stick.ox + dx, stick.oy + dy, 26, 0, TAU); ctx.fill();
     ctx.restore();
   }
 
