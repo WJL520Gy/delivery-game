@@ -1,0 +1,2416 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>极速外卖 · 骑手日记</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b0e14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="极速外卖">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+  :root{ --orange:#ff8c42; --gold:#ffd166; }
+  *{box-sizing:border-box}
+  html,body{
+    margin:0;height:100%;overflow:hidden;background:#0b0e14;
+    font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+    user-select:none;-webkit-user-select:none;
+  }
+  #game{position:fixed;inset:0;overflow:hidden}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+
+  .mute{
+    position:absolute;top:14px;right:14px;z-index:20;
+    width:38px;height:38px;border-radius:12px;cursor:pointer;
+    background:rgba(16,20,28,.66);border:1px solid rgba(255,255,255,.1);
+    color:#e8edf5;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;
+    backdrop-filter:blur(6px);transition:background .15s,transform .12s;
+  }
+  .mute:hover{background:rgba(30,36,48,.85);transform:translateY(-1px)}
+
+  .overlay{
+    position:absolute;inset:0;z-index:10;
+    display:none;align-items:center;justify-content:center;padding:20px;
+    background:radial-gradient(circle at 50% 42%, rgba(10,13,19,.30), rgba(6,8,12,.90));
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  }
+  .overlay.show{display:flex}
+
+  .card{
+    width:min(580px,94vw);max-height:92vh;overflow-y:auto;
+    background:linear-gradient(168deg, rgba(30,36,48,.97), rgba(15,19,26,.98));
+    border:1px solid rgba(255,255,255,.09);border-radius:24px;
+    padding:clamp(20px,3.4vw,34px);
+    box-shadow:0 30px 80px rgba(0,0,0,.65), inset 0 1px 0 rgba(255,255,255,.07);
+    color:#e8edf5;text-align:center;
+    animation:pop .34s cubic-bezier(.2,.9,.3,1.25);
+  }
+  .card.small{width:min(360px,90vw)}
+  @keyframes pop{from{transform:scale(.93) translateY(12px);opacity:0}to{transform:none;opacity:1}}
+
+  .kicker{
+    display:inline-block;font-size:12px;letter-spacing:.14em;color:#ffb86b;
+    background:rgba(255,140,66,.13);border:1px solid rgba(255,140,66,.28);
+    padding:5px 12px;border-radius:999px;margin-bottom:12px;
+  }
+  h1{
+    margin:0 0 4px;font-size:clamp(30px,6.6vw,44px);letter-spacing:.06em;
+    background:linear-gradient(180deg,#fff 10%,#ffb86b 90%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:0 8px 30px rgba(255,140,66,.22);
+  }
+  h2{margin:0 0 10px;font-size:clamp(21px,4.2vw,27px);letter-spacing:.04em}
+  .sub{color:#8b98a8;font-size:13px;letter-spacing:.5em;margin-bottom:18px;padding-left:.5em}
+  .muted{color:#8b98a8;font-size:14px;margin:6px 0 20px}
+
+  .rules{
+    list-style:none;margin:0 0 20px;padding:14px 16px;text-align:left;
+    background:rgba(255,255,255,.035);border:1px solid rgba(255,255,255,.06);
+    border-radius:14px;font-size:13px;line-height:1.85;color:#c3ccd9;
+  }
+  .rules li{position:relative;padding-left:15px}
+  .rules li::before{content:"";position:absolute;left:0;top:.75em;width:5px;height:5px;border-radius:50%;background:#ff8c42}
+  .rules b{color:#fff;font-weight:600}
+  .rules .warn{color:#ff8787}
+
+  .tag{
+    display:inline-block;font-style:normal;font-weight:700;font-size:12px;
+    width:20px;height:20px;line-height:20px;text-align:center;border-radius:6px;
+    color:#0b0e14;vertical-align:-2px;
+  }
+  .tag.o{background:#ff9f43}
+  .tag.b{background:#4dabf7}
+
+  button.primary{
+    appearance:none;border:0;cursor:pointer;
+    padding:15px 44px;border-radius:15px;
+    font-family:inherit;font-size:17px;font-weight:700;letter-spacing:.06em;color:#fff;
+    background:linear-gradient(180deg,#ff9a52,#ef5f26);
+    box-shadow:0 10px 26px rgba(242,98,42,.34), inset 0 1px 0 rgba(255,255,255,.35);
+    transition:transform .12s, box-shadow .15s, filter .15s;
+  }
+  button.primary:hover{transform:translateY(-2px);box-shadow:0 14px 32px rgba(242,98,42,.45)}
+  button.primary:active{transform:translateY(0) scale(.985);filter:brightness(.95)}
+
+  .foot{margin-top:12px;font-size:12px;color:#6f7b8c}
+  .install-tip{margin-top:6px;font-size:11.5px;color:#5f6a7a}
+  kbd{
+    display:inline-block;padding:1px 6px;border-radius:5px;font-family:inherit;font-size:11px;
+    background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);
+    border-bottom-width:2px;color:#c3ccd9;
+  }
+
+  .stats{display:flex;gap:9px;margin:12px 0 0}
+  .stat{
+    flex:1;padding:11px 6px;border-radius:13px;
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+  }
+  .stat span{display:block;font-size:clamp(18px,4vw,24px);font-weight:800;color:var(--gold);letter-spacing:.02em}
+  .stat.bad span{color:#ff8787}
+  .stat small{display:block;margin-top:4px;font-size:11.5px;color:#8b98a8}
+
+  .epilogue{
+    margin:16px 0 20px;padding:13px 15px;
+    font-size:13.5px;line-height:1.95;color:#aab6c6;text-align:left;
+    background:rgba(255,255,255,.03);border-left:3px solid rgba(255,140,66,.5);
+    border-radius:0 10px 10px 0;
+  }
+  .epilogue b{color:#ffb86b;font-weight:600}
+</style>
+</head>
+<body>
+<div id="game">
+  <canvas id="cv"></canvas>
+  <button id="btnMute" class="mute" title="静音 (M)">🔊</button>
+
+  <div id="screenMenu" class="overlay show">
+    <div class="card">
+      <div class="kicker">今日营业中 · 第 1 天</div>
+      <h1>极速外卖</h1>
+      <div class="sub">骑手日记</div>
+      <ul class="rules">
+        <li><b>WASD</b> / <b>方向键</b> 骑行，手机上直接拖拽屏幕</li>
+        <li>路面上的 <b>绿箭头</b> 才是能走的方向，红灯路口有车横穿</li>
+        <li>路口有 <b>读秒</b>：绿灯剩几秒、红灯还等几秒都写在路上</li>
+        <li>只有一半路口装了灯，没灯的路口直接过，但照样有车横穿</li>
+        <li>雨天、雪天、大风、夜里，都会让你更慢、更滑、更看不清</li>
+        <li>电瓶会没电，没电只能推；车还会在最忙的时候抛锚</li>
+        <li>系统会派 <span class="warn">垃圾单</span>，拒单要罚款；催单、卡餐、差评都在扣你的情绪</li>
+      </ul>
+      <button id="btnStart" class="primary">开始接单</button>
+      <div class="foot">按 <kbd>Enter</kbd> 开始 · <kbd>E</kbd> 催单/接电话/踹车 · <kbd>P</kbd> 暂停 · <kbd>M</kbd> 静音</div>
+      <div class="foot install-tip">手机上用浏览器菜单选择「添加到主屏幕」，还能全屏当 App 玩</div>
+    </div>
+  </div>
+
+  <div id="screenOver" class="overlay">
+    <div class="card">
+      <div class="kicker" id="oRank">收工啦</div>
+      <h2>今日收工</h2>
+      <div class="stats">
+        <div class="stat"><span id="oMoney">¥0</span><small>到手收入</small></div>
+        <div class="stat"><span id="oOrders">0</span><small>完成单数</small></div>
+      </div>
+      <div class="stats">
+        <div class="stat bad"><span id="oFines">¥0</span><small>罚款</small></div>
+        <div class="stat bad"><span id="oViolations">0</span><small>违章次数</small></div>
+      </div>
+      <div class="epilogue" id="oEpilogue"></div>
+      <button id="btnAgain" class="primary">再来一单</button>
+      <div class="foot">按 <kbd>Enter</kbd> 重新开始</div>
+    </div>
+  </div>
+
+  <div id="screenPause" class="overlay">
+    <div class="card small">
+      <h2>已暂停</h2>
+      <p class="muted">深呼吸，看看路况。</p>
+      <button id="btnResume" class="primary">继续送餐</button>
+      <div class="foot">按 <kbd>P</kbd> / <kbd>Esc</kbd> 继续</div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =========================================================
+     工具
+  ========================================================= */
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const randInt = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
+  const pick = (arr) => arr[(Math.random() * arr.length) | 0];
+  const FONT = '"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,-apple-system,"Segoe UI",sans-serif';
+
+  function shortAngle(a, b) {
+    let d = (b - a) % TAU;
+    if (d > Math.PI) d -= TAU;
+    if (d < -Math.PI) d += TAU;
+    return d;
+  }
+  function hexA(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+  }
+
+  /* =========================================================
+     常量
+  ========================================================= */
+  const BLOCK_W = 210, BLOCK_H = 160, ROAD = 96, COLS = 5, ROWS = 5;
+  const WORLD_W = COLS * BLOCK_W + (COLS + 1) * ROAD;
+  const WORLD_H = ROWS * BLOCK_H + (ROWS + 1) * ROAD;
+  const PR = 14;
+  const MAXV = 330;
+  const PUSH_V = 96;              // 推车速度
+  const ZONE = 40;
+  const HALF_ROAD = ROAD / 2;
+  const LIGHT_PERIOD = 12.4;      // 红绿灯整周期（秒）
+  const G_T = 5.4;                // 绿灯时长
+  const Y_T = 0.8;                // 黄灯时长
+  const V_OFF = 6.2;              // 南北向相位偏移
+
+  // 只有一半路口装了信号灯（棋盘式分布），其余是普通路口
+  function isSignal(i, j) { return (i + j) % 2 === 0; }
+
+  const canvas = document.getElementById('cv');
+  const ctx = canvas.getContext('2d');
+  const TOUCH = !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  let W = 0, H = 0, DPR = 1, UI = 1;
+
+  const zoom = () => clamp(Math.min(W / 1010, H / 655), 0.6, 1.55);
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * DPR);
+    canvas.height = Math.round(H * DPR);
+    UI = clamp(W / 1100, 0.88, 1.3);
+    resetPrecip();
+  }
+
+  function rr(x, y, w, h, r) {
+    r = Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function star(cx, cy, r, fill) {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const rad = i % 2 ? r * 0.45 : r;
+      const px = cx + Math.cos(a) * rad;
+      const py = cy + Math.sin(a) * rad;
+      if (i) ctx.lineTo(px, py); else ctx.moveTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+
+  /* =========================================================
+     天气
+  ========================================================= */
+  const WX_DEF = {
+    clear: { cn: '晴',   rain: 0,   snow: 0, grip: 1,    speed: 1,    slip: 0,   wind: 0,   tint: 'rgba(0,0,0,0)' },
+    heat:  { cn: '高温', rain: 0,   snow: 0, grip: 1,    speed: 0.94, slip: 0,   wind: 0.1, tint: 'rgba(255,120,40,0.05)' },
+    rain:  { cn: '雨',   rain: 0.6, snow: 0, grip: 0.78, speed: 0.90, slip: 0.55, wind: 0.3, tint: 'rgba(50,80,140,0.16)' },
+    storm: { cn: '暴雨', rain: 1,   snow: 0, grip: 0.64, speed: 0.83, slip: 1,   wind: 0.8, tint: 'rgba(35,55,105,0.28)' },
+    snow:  { cn: '雪',   rain: 0,   snow: 1, grip: 0.60, speed: 0.82, slip: 0.9, wind: 0.25, tint: 'rgba(200,220,255,0.16)' },
+    wind:  { cn: '大风', rain: 0,   snow: 0, grip: 0.86, speed: 0.90, slip: 0.25, wind: 1,  tint: 'rgba(180,200,220,0.05)' }
+  };
+  let wx = WX_DEF.clear;
+  let wxKey = 'clear';
+
+  function setWeather(key, quiet) {
+    wxKey = key;
+    wx = WX_DEF[key] || WX_DEF.clear;
+    resetPrecip();
+    if (!quiet) banner('天气变了 · ' + wx.cn);
+  }
+
+  let drops = [], flakes = [], streaks = [];
+  function resetPrecip() {
+    const n = Math.round(wx.rain * 260 * Math.max(0.65, W / 1280));
+    drops = [];
+    for (let i = 0; i < n; i++) {
+      drops.push({
+        x: rand(-80, W + 80), y: rand(-H, H),
+        len: rand(14, 20 + wx.rain * 26), v: rand(760, 1180), a: rand(0.10, 0.20 + wx.rain * 0.32)
+      });
+    }
+    const m = Math.round((wx.snow ? 110 : 0) * Math.max(0.65, W / 1280));
+    flakes = [];
+    for (let i = 0; i < m; i++) {
+      flakes.push({ x: rand(-40, W + 40), y: rand(-H, H), r: rand(1.2, 2.8), v: rand(40, 110), ph: rand(0, TAU) });
+    }
+    const k = Math.round((wx.wind > 0.5 ? 40 : 0) * Math.max(0.65, W / 1280));
+    streaks = [];
+    for (let i = 0; i < k; i++) {
+      streaks.push({ x: rand(-100, W), y: rand(0, H), len: rand(30, 90), v: rand(500, 900), a: rand(0.04, 0.10) });
+    }
+  }
+
+  /* =========================================================
+     状态
+  ========================================================= */
+  let state = 'menu';
+  let money = 0, ordersDone = 0, lives = 3, combo = 0, bestCombo = 0;
+  let fines = 0, violations = 0, falls = 0, complaints = 0, rejects = 0;
+  let order = null;
+  let cars = [];
+  let particles = [], texts = [], rings = [];
+  let clock = 0, elapsed = 0, hintT = 0, bannerT = 0, bannerText = '';
+  let shakeT = 0, shakeDur = 1, shakeMag = 0;
+  let muted = false;
+  let hurryCd = 0;
+  let actionBtn = null, rejectBtn = null;
+  let flashT = 0;
+
+  let battery = 100, pushing = false;
+  let mood = 100, breakdownT = 0;
+  let bikeDown = 0, kickCd = 0;
+  let heatT = 0;
+  let gustT = 0, gustDir = 1, gustPower = 0;
+  let night = 0;
+  let lastLCol = '';
+
+  const hudBoxes = { panel: null, card: null, mini: null, call: null, speed: null };
+
+  const player = {
+    x: 0, y: 0, vx: 0, vy: 0, angle: 0,
+    invuln: 0, stun: 0, slipT: 0, fallT: 0,
+    lightI: -1, lightJ: -1
+  };
+  const cam = { x: 0, y: 0, tx: 0, ty: 0 };
+
+  function banner(text) { bannerText = text; bannerT = 2.6; }
+
+  // 玩家当前所在方向（用于判断“我这条路的灯”）
+  function playerAxis() {
+    let onH = false, onV = false;
+    for (let j = 0; j <= ROWS; j++) { if (Math.abs(player.y - YS[j]) < HALF_ROAD) { onH = true; break; } }
+    for (let i = 0; i <= COLS; i++) { if (Math.abs(player.x - XS[i]) < HALF_ROAD) { onV = true; break; } }
+    if (onH && !onV) return 'h';
+    if (onV && !onH) return 'v';
+    const sp = Math.hypot(player.vx, player.vy);
+    if (sp > 30) return Math.abs(player.vx) > Math.abs(player.vy) ? 'h' : 'v';
+    return onH ? 'h' : 'v';
+  }
+
+  /* =========================================================
+     城市
+  ========================================================= */
+  const buildings = [];
+  const HUES = [16, 30, 198, 262, 142, 346, 44, 214];
+
+  const blockX = (i) => ROAD + i * (BLOCK_W + ROAD);
+  const blockY = (j) => ROAD + j * (BLOCK_H + ROAD);
+  const roadCenterX = (i) => i * (BLOCK_W + ROAD) + ROAD / 2;
+  const roadCenterY = (j) => j * (BLOCK_H + ROAD) + ROAD / 2;
+
+  const XS = [], YS = [];
+  for (let i = 0; i <= COLS; i++) XS.push(roadCenterX(i));
+  for (let j = 0; j <= ROWS; j++) YS.push(roadCenterY(j));
+
+  const START = { x: roadCenterX(Math.floor(COLS / 2)), y: roadCenterY(Math.floor(ROWS / 2)) };
+
+  function buildCity() {
+    buildings.length = 0;
+    for (let j = 0; j < ROWS; j++) {
+      for (let i = 0; i < COLS; i++) {
+        const bx = blockX(i), by = blockY(j);
+        const isPark = Math.random() < 0.16;
+        if (isPark) {
+          const g = { x: bx + 6, y: by + 6, w: BLOCK_W - 12, h: BLOCK_H - 12 };
+          const trees = [];
+          const n = randInt(5, 9);
+          for (let k = 0; k < n; k++) {
+            trees.push({ x: g.x + rand(22, g.w - 22), y: g.y + rand(22, g.h - 22), r: rand(9, 16) });
+          }
+          buildings.push({ type: 'park', g, trees });
+        } else {
+          const pad = 8;
+          const g = { x: bx + pad, y: by + pad, w: BLOCK_W - pad * 2, h: BLOCK_H - pad * 2 };
+          const hue = pick(HUES) + rand(-7, 7);
+          const details = [];
+          const dn = randInt(2, 4);
+          for (let k = 0; k < dn; k++) {
+            const dw = rand(26, g.w * 0.3);
+            const dh = rand(20, g.h * 0.28);
+            details.push({ x: g.x + rand(18, g.w - 18 - dw), y: g.y + rand(18, g.h - 18 - dh), w: dw, h: dh });
+          }
+          // 夜里亮灯的窗
+          const wins = [];
+          const wn = randInt(2, 4);
+          for (let k = 0; k < wn; k++) {
+            wins.push({
+              x: g.x + rand(16, g.w - 36),
+              y: g.y + rand(16, g.h - 26),
+              w: rand(9, 16), h: rand(6, 10),
+              ph: rand(0, TAU)
+            });
+          }
+          buildings.push({
+            type: 'build', g,
+            base: 'hsl(' + hue.toFixed(1) + ' 27% 51%)',
+            roof: 'hsl(' + hue.toFixed(1) + ' 30% 63%)',
+            roofD: 'hsl(' + hue.toFixed(1) + ' 26% 55%)',
+            edge: 'hsl(' + hue.toFixed(1) + ' 30% 42%)',
+            details, wins,
+            door: null
+          });
+        }
+      }
+    }
+  }
+
+  function makeDoor(b) {
+    const g = b.g;
+    const off = 36;
+    const edge = randInt(0, 3);
+    if (edge === 0) return { x: g.x + g.w * rand(0.35, 0.65), y: g.y - off };
+    if (edge === 1) return { x: g.x + g.w + off, y: g.y + g.h * rand(0.35, 0.65) };
+    if (edge === 2) return { x: g.x + g.w * rand(0.35, 0.65), y: g.y + g.h + off };
+    return { x: g.x - off, y: g.y + g.h * rand(0.35, 0.65) };
+  }
+
+  /* =========================================================
+     红绿灯
+  ========================================================= */
+  // 某个方向当前颜色 + 剩余秒数（读秒用）
+  function axisInfo(axis) {
+    const t = clock % LIGHT_PERIOD;
+    const p = (t - (axis === 'h' ? 0 : V_OFF) + LIGHT_PERIOD) % LIGHT_PERIOD;
+    if (p < G_T) return { c: 'g', left: G_T - p };
+    if (p < G_T + Y_T) return { c: 'y', left: G_T + Y_T - p };
+    return { c: 'r', left: LIGHT_PERIOD - p };
+  }
+
+  function lightState() {
+    const h = axisInfo('h').c, v = axisInfo('v').c;
+    if (h === 'g') return 'h';
+    if (h === 'y') return 'hy';
+    if (v === 'g') return 'v';
+    if (v === 'y') return 'vy';
+    return 'all';
+  }
+  function isGreen(axis, st) {
+    return (axis === 'h' && st === 'h') || (axis === 'v' && st === 'v');
+  }
+  function axisColor(axis, st) {
+    if (axis === 'h') return st === 'h' ? '#4ade80' : st === 'hy' ? '#fbbf24' : '#f87171';
+    return st === 'v' ? '#4ade80' : st === 'vy' ? '#fbbf24' : '#f87171';
+  }
+  const COLOR_HEX = { g: '#4ade80', y: '#fbbf24', r: '#f87171' };
+
+  /* =========================================================
+     车流
+  ========================================================= */
+  const CAR_COLORS = ['#e2584f', '#4f86e0', '#e8c04a', '#8f7fe0', '#43b98a', '#dfe3ea', '#e88a4a'];
+
+  function lanesList() {
+    const lanes = [];
+    for (let j = 0; j <= ROWS; j++) {
+      const cy = roadCenterY(j);
+      lanes.push({ axis: 'h', fixed: cy - 22, dir: 1, road: j });
+      lanes.push({ axis: 'h', fixed: cy + 22, dir: -1, road: j });
+    }
+    for (let i = 0; i <= COLS; i++) {
+      const cx = roadCenterX(i);
+      lanes.push({ axis: 'v', fixed: cx - 22, dir: 1, road: i });
+      lanes.push({ axis: 'v', fixed: cx + 22, dir: -1, road: i });
+    }
+    return lanes;
+  }
+
+  function makeCar(lanes, avoid) {
+    let ln, t, tries = 0;
+    do {
+      ln = pick(lanes);
+      t = ln.axis === 'h' ? rand(0, WORLD_W) : rand(0, WORLD_H);
+      tries++;
+    } while (tries < 24 && avoid && Math.hypot(
+      ln.axis === 'h' ? t : ln.fixed,
+      ln.axis === 'h' ? ln.fixed : t
+    ) < 190);
+
+    return {
+      axis: ln.axis, fixed: ln.fixed, dir: ln.dir, t,
+      speed: rand(95, 172), v: 0,
+      color: pick(CAR_COLORS)
+    };
+  }
+
+  function spawnCars(n) {
+    cars = [];
+    const lanes = lanesList();
+    for (let k = 0; k < n; k++) {
+      const c = makeCar(lanes, true);
+      c.v = c.speed * 0.8;
+      cars.push(c);
+    }
+  }
+
+  function maybeAddCar() {
+    const target = Math.min(18, 9 + Math.floor(ordersDone / 2));
+    if (cars.length >= target) return;
+    const c = makeCar(lanesList(), true);
+    c.v = c.speed * 0.7;
+    cars.push(c);
+  }
+
+  function carRect(c) {
+    return c.axis === 'h'
+      ? { x: c.t - 29, y: c.fixed - 15, w: 58, h: 30 }
+      : { x: c.fixed - 15, y: c.t - 29, w: 30, h: 58 };
+  }
+
+  /* =========================================================
+     订单
+  ========================================================= */
+  function newOrder() {
+    const pool = buildings.filter((b) => b.type === 'build');
+    let from = null, to = null;
+    for (let i = 0; i < 400; i++) {
+      from = pick(pool);
+      to = pick(pool);
+      if (from === to) continue;
+      const d = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
+      if (d > 500) break;
+    }
+    if (from === to) to = pick(pool);
+
+    if (!from.door) from.door = makeDoor(from);
+    if (!to.door) to.door = makeDoor(to);
+
+    // 系统乱派单：越到后面越容易派垃圾单
+    const junkChance = clamp(0.16 + ordersDone * 0.02, 0.16, 0.4);
+    const junk = Math.random() < junkChance && ordersDone >= 2;
+
+    const route =
+      Math.hypot(player.x - from.door.x, player.y - from.door.y) +
+      Math.hypot(from.door.x - to.door.x, from.door.y - to.door.y);
+
+    const diff = clamp(1 - 0.011 * ordersDone, 0.72, 1);
+    const timeLimit = clamp(route / 230 + 18, 23, 62) * diff;
+    const centerDist = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
+    let base = 6 + Math.round(centerDist / 110);
+    if (junk) base = Math.max(3, Math.round(base * 0.55));
+
+    order = {
+      from, to,
+      pickup: from.door,
+      drop: to.door,
+      state: 'pickup',
+      junk,
+      rejectT: junk ? 6 : 0,
+      timeLimit,
+      timeLeft: timeLimit,
+      lastSec: Math.ceil(timeLimit),
+      base,
+      wait: 0, waitMax: 1,
+      nextCall: 0, callT: 0, annoy: 0,
+      brokeOnce: false
+    };
+    if (junk) {
+      sfx('hang');
+      addText(player.x, player.y - 60, '系统派了一单垃圾单', '#ff8787', 0.95);
+    }
+  }
+
+  function rejectOrder() {
+    if (!order || order.rejectT <= 0) return;
+    const fee = 8;
+    fines += fee;
+    money = Math.max(0, money - fee);
+    rejects++;
+    mood = clamp(mood - 6, 0, 100);
+    sfx('fine');
+    addText(player.x, player.y - 56, '拒单 · 罚款 ¥' + fee, '#ff8787', 1.05);
+    newOrder();
+  }
+
+  function arriveShop() {
+    order.state = 'waiting';
+    order.wait = clamp(2.8 + ordersDone * 0.12 + ((wx.rain || wx.snow) ? 2.2 : 0) + rand(0, 2.4), 2.6, 11);
+    order.waitMax = order.wait;
+    sfx('bell');
+    ring(order.pickup.x, order.pickup.y, '#ff9f43');
+    addText(order.pickup.x, order.pickup.y - 44, '到店 · 等出餐', '#ffd8a8');
+  }
+
+  function pickedUp() {
+    order.state = 'deliver';
+    order.nextCall = rand(4.5, 9);
+    order.callT = 0;
+    sfx('pickup');
+    ring(order.pickup.x, order.pickup.y, '#ff9f43');
+    burst(order.pickup.x, order.pickup.y, 10, '#ffd8a8', 0.6);
+    addText(order.pickup.x, order.pickup.y - 44, '取餐成功', '#ffd8a8');
+    // 借商家的换电柜换一块满电的
+    if (battery < 92 || pushing) {
+      addText(order.pickup.x, order.pickup.y - 70, '换电完成', '#8ce99a', 0.9, 0.4);
+    }
+    battery = 100;
+    pushing = false;
+  }
+
+  function hurry() {
+    if (!order || order.state !== 'waiting' || hurryCd > 0) return;
+    hurryCd = 1.15;
+    order.wait = Math.max(0, order.wait - 0.85);
+    order.hurried = (order.hurried || 0) + 1;
+    mood = clamp(mood - 0.6, 0, 100);
+    sfx('bell');
+    addText(player.x, player.y - 46, '商家：马上好！', '#ffd8a8', 0.9);
+  }
+
+  function answerCall() {
+    if (!order || order.callT <= 0) return;
+    order.callT = 0;
+    order.nextCall = rand(7, 13);
+    sfx('call');
+    addText(player.x, player.y - 48, '已回复：马上到！', '#a5d8ff', 0.9);
+  }
+
+  function kickBike() {
+    if (bikeDown <= 0 || kickCd > 0) return;
+    kickCd = 0.45;
+    bikeDown = Math.max(0, bikeDown - 1.05);
+    sfx('bell');
+    burst(player.x, player.y, 6, '#cbd5e1', 0.6);
+    addText(player.x, player.y - 40, '咣！', '#cbd5e1', 0.95);
+    if (bikeDown <= 0) addText(player.x, player.y - 66, '打着了，走', '#8ce99a', 0.95);
+  }
+
+  function deliver() {
+    const ratio = clamp(order.timeLeft / order.timeLimit, 0, 1);
+    let tip = Math.round(order.base * 0.65 * ratio);
+    if (order.annoy > 0) tip = Math.round(tip * clamp(1 - 0.25 * order.annoy, 0.25, 1));
+    combo++;
+    if (combo > bestCombo) bestCombo = combo;
+    const mult = 1 + 0.1 * Math.min(combo - 1, 6);
+    const pay = Math.max(1, Math.round((order.base + tip) * mult));
+
+    money += pay;
+    ordersDone++;
+    if (order.annoy >= 2) complaints++;
+    mood = clamp(mood + 7, 0, 100);
+
+    ring(order.drop.x, order.drop.y, '#63e6be');
+    burst(order.drop.x, order.drop.y, 22, '#63e6be', 1);
+    addText(order.drop.x, order.drop.y - 44, '+¥' + pay, '#8ce99a', 1.4);
+    if (combo >= 2) addText(order.drop.x, order.drop.y - 72, '连击 x' + combo, '#ffd166', 1.2);
+    if (order.annoy >= 2) addText(order.drop.x, order.drop.y - 98, '顾客：下次别接了', '#ff8787', 0.95);
+    sfx('deliver');
+
+    maybeAddCar();
+    updateWeather();
+    newOrder();
+  }
+
+  function failOrder() {
+    lives--;
+    combo = 0;
+    mood = clamp(mood - 20, 0, 100);
+    shake(13);
+    sfx('fail');
+    const why = order.state === 'waiting' ? '卡餐 · 超时' : '超时 · 差评';
+    addText(player.x, player.y - 48, why, '#ff6b6b', 1.5);
+    if (lives <= 0) gameOver();
+    else newOrder();
+  }
+
+  function updateWeather() {
+    const wetStart = wxKey === 'clear' || wxKey === 'heat' || wxKey === 'wind';
+    if (ordersDone === 3 && wetStart && Math.random() < 0.8) {
+      setWeather('rain');
+    } else if (ordersDone === 6 && wxKey === 'rain') {
+      setWeather('storm');
+    } else if (ordersDone >= 9 && wxKey === 'rain' && Math.random() < 0.5) {
+      setWeather('storm');
+    }
+  }
+
+  /* =========================================================
+     效果
+  ========================================================= */
+  function shake(m) { shakeMag = m; shakeDur = 0.32; shakeT = 0.32; }
+
+  function burst(x, y, n, color, spread) {
+    spread = spread || 1;
+    for (let i = 0; i < n; i++) {
+      const a = rand(0, TAU), s = rand(40, 230) * spread;
+      particles.push({
+        x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
+        life: rand(0.3, 0.75), max: 0.75, size: rand(2, 4.6), color
+      });
+    }
+  }
+  function addText(x, y, text, color, scale, delay) {
+    texts.push({ x, y, text, color, life: 1.15, max: 1.15, scale: scale || 1, delay: delay || 0 });
+  }
+  function ring(x, y, color) {
+    rings.push({ x, y, r: 14, life: 0.55, max: 0.55, color });
+  }
+  function spawnDust() {
+    particles.push({
+      x: player.x - Math.cos(player.angle) * 14 + rand(-4, 4),
+      y: player.y - Math.sin(player.angle) * 14 + rand(-4, 4),
+      vx: rand(-26, 26), vy: rand(-26, 26),
+      life: 0.4, max: 0.4, size: rand(2, 4),
+      color: wx.rain ? 'rgba(190,210,235,0.55)' : 'rgba(220,225,235,0.5)'
+    });
+  }
+
+  function updateEffects(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.life -= dt;
+      if (p.life <= 0) { particles.splice(i, 1); continue; }
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      const damp = Math.exp(-3 * dt);
+      p.vx *= damp; p.vy *= damp;
+    }
+    for (let i = texts.length - 1; i >= 0; i--) {
+      const t = texts[i];
+      if (t.delay > 0) { t.delay -= dt; continue; }
+      t.life -= dt;
+      if (t.life <= 0) { texts.splice(i, 1); continue; }
+      t.y -= 34 * dt;
+    }
+    for (let i = rings.length - 1; i >= 0; i--) {
+      const r = rings[i];
+      r.life -= dt;
+      if (r.life <= 0) { rings.splice(i, 1); continue; }
+      r.r += 130 * dt;
+    }
+    if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+    if (hintT > 0) hintT = Math.max(0, hintT - dt);
+    if (bannerT > 0) bannerT = Math.max(0, bannerT - dt);
+    if (flashT > 0) flashT = Math.max(0, flashT - dt);
+    if (hurryCd > 0) hurryCd -= dt;
+    if (kickCd > 0) kickCd -= dt;
+  }
+
+  function updatePrecip(dt) {
+    const windK = 0.24 + wx.wind * 0.55 + (gustT > 0 ? 0.6 : 0);
+    for (let i = 0; i < drops.length; i++) {
+      const d = drops[i];
+      d.y += d.v * dt;
+      d.x -= d.v * windK * dt;
+      if (d.y > H + 40) { d.y = rand(-80, -10); d.x = rand(-60, W + 60); }
+      if (d.x < -80) d.x = W + rand(0, 80);
+    }
+    for (let i = 0; i < flakes.length; i++) {
+      const f = flakes[i];
+      f.y += f.v * dt;
+      f.x += Math.sin(clock * 1.2 + f.ph) * 16 * dt - gustPower * 24 * dt;
+      if (f.y > H + 20) { f.y = rand(-60, -10); f.x = rand(0, W); }
+    }
+    for (let i = 0; i < streaks.length; i++) {
+      const s = streaks[i];
+      s.x += (s.v + gustPower * 300) * dt;
+      if (s.x > W + 40) { s.x = -rand(0, 100); s.y = rand(0, H); }
+    }
+  }
+
+  /* =========================================================
+     音频
+  ========================================================= */
+  let actx = null;
+  function ac() {
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { actx = null; }
+    }
+    if (actx && actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function tone(freq, dur, type, vol, slide, delay) {
+    if (muted) return;
+    const a = ac();
+    if (!a) return;
+    const t0 = a.currentTime + (delay || 0);
+    const o = a.createOscillator();
+    const g = a.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(vol || 0.07, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function sfx(name) {
+    switch (name) {
+      case 'pickup':
+        tone(680, 0.09, 'triangle', 0.07); tone(920, 0.12, 'triangle', 0.06, 0, 0.09); break;
+      case 'deliver':
+        tone(523, 0.1, 'sine', 0.08); tone(659, 0.1, 'sine', 0.08, 0, 0.09);
+        tone(784, 0.18, 'sine', 0.08, 0, 0.18); break;
+      case 'crash': tone(180, 0.24, 'sawtooth', 0.09, 0.45); break;
+      case 'fail':
+        tone(330, 0.18, 'square', 0.055, 0.55); tone(200, 0.3, 'square', 0.055, 0.55, 0.16); break;
+      case 'over':
+        tone(392, 0.2, 'sine', 0.08); tone(330, 0.2, 'sine', 0.08, 0, 0.18);
+        tone(262, 0.45, 'sine', 0.08, 0, 0.36); break;
+      case 'tick': tone(900, 0.05, 'sine', 0.045); break;
+      case 'start':
+        tone(523, 0.1, 'triangle', 0.07); tone(784, 0.16, 'triangle', 0.07, 0, 0.1); break;
+      case 'bell': tone(1180, 0.06, 'triangle', 0.05); tone(1560, 0.08, 'triangle', 0.04, 0, 0.05); break;
+      case 'call': tone(760, 0.08, 'square', 0.05); tone(760, 0.08, 'square', 0.05, 0, 0.14); break;
+      case 'hang': tone(420, 0.1, 'square', 0.05, 0.6); break;
+      case 'slip': tone(300, 0.18, 'sawtooth', 0.05, 0.35); break;
+      case 'fall':
+        tone(150, 0.35, 'sawtooth', 0.09, 0.4); tone(90, 0.5, 'square', 0.06, 0.5, 0.06); break;
+      case 'fine': tone(660, 0.08, 'square', 0.05); tone(440, 0.14, 'square', 0.05, 0, 0.08); break;
+      case 'dead': tone(220, 0.3, 'sawtooth', 0.06, 0.5); break;
+      case 'wind': tone(300, 0.4, 'sawtooth', 0.03, 0.7); break;
+    }
+  }
+
+  /* =========================================================
+     输入
+  ========================================================= */
+  const keys = new Set();
+  let stick = null;
+
+  function inputVec() {
+    let x = 0, y = 0;
+    if (keys.has('a') || keys.has('arrowleft')) x -= 1;
+    if (keys.has('d') || keys.has('arrowright')) x += 1;
+    if (keys.has('w') || keys.has('arrowup')) y -= 1;
+    if (keys.has('s') || keys.has('arrowdown')) y += 1;
+
+    if (stick) {
+      const dx = stick.x - stick.ox;
+      const dy = stick.y - stick.oy;
+      const m = Math.hypot(dx, dy);
+      if (m > 10) {
+        const mag = Math.min(1, (m - 10) / 55);
+        x = dx / m * mag; y = dy / m * mag;
+      } else { x = 0; y = 0; }
+    }
+    const len = Math.hypot(x, y);
+    if (len > 1) { x /= len; y /= len; }
+    return { x, y };
+  }
+
+  function doAction() {
+    if (state !== 'playing' || !order) return;
+    if (bikeDown > 0) { kickBike(); return; }
+    if (order.state === 'waiting') hurry();
+    else if (order.callT > 0) answerCall();
+  }
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.key.toLowerCase();
+    if (k === ' ' || k.indexOf('arrow') === 0) e.preventDefault();
+    keys.add(k);
+    if (e.repeat) return;
+
+    if (k === 'enter') {
+      if (state === 'menu' || state === 'over') startGame();
+    } else if (k === 'e') {
+      doAction();
+    } else if (k === 'p' || k === 'escape') {
+      if (state === 'playing') pauseGame();
+      else if (state === 'paused') resumeGame();
+    } else if (k === 'm') {
+      toggleMute();
+    }
+  });
+  window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
+  window.addEventListener('blur', () => { keys.clear(); stick = null; });
+
+  function hitBox(b, x, y) {
+    return b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (state !== 'playing') return;
+    if (hitBox(actionBtn, e.clientX, e.clientY)) { doAction(); e.preventDefault(); return; }
+    if (hitBox(rejectBtn, e.clientX, e.clientY)) { rejectOrder(); e.preventDefault(); return; }
+
+    stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!stick || e.pointerId !== stick.id) return;
+    stick.x = e.clientX; stick.y = e.clientY;
+  });
+  function endStick(e) { if (stick && e.pointerId === stick.id) stick = null; }
+  canvas.addEventListener('pointerup', endStick);
+  canvas.addEventListener('pointercancel', endStick);
+  canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  window.addEventListener('resize', resize);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state === 'playing') pauseGame();
+  });
+
+  /* =========================================================
+     物理 / 更新
+  ========================================================= */
+  function resolveCircleRect(p, r) {
+    const cx = clamp(p.x, r.x, r.x + r.w);
+    const cy = clamp(p.y, r.y, r.y + r.h);
+    let dx = p.x - cx, dy = p.y - cy;
+    const d2 = dx * dx + dy * dy;
+    if (d2 >= PR * PR) return;
+
+    if (d2 > 0.0001) {
+      const d = Math.sqrt(d2);
+      const nx = dx / d, ny = dy / d;
+      p.x += nx * (PR - d);
+      p.y += ny * (PR - d);
+      const vn = p.vx * nx + p.vy * ny;
+      if (vn < 0) { p.vx -= vn * nx; p.vy -= vn * ny; }
+    } else {
+      const l = p.x - r.x, rt = r.x + r.w - p.x;
+      const t = p.y - r.y, b = r.y + r.h - p.y;
+      const m = Math.min(l, rt, t, b);
+      if (m === l) { p.x = r.x - PR; p.vx = Math.min(0, p.vx); }
+      else if (m === rt) { p.x = r.x + r.w + PR; p.vx = Math.max(0, p.vx); }
+      else if (m === t) { p.y = r.y - PR; p.vy = Math.min(0, p.vy); }
+      else { p.y = r.y + r.h + PR; p.vy = Math.max(0, p.vy); }
+    }
+  }
+
+  function startSlip(speed) {
+    player.slipT = 0.55;
+    shake(9);
+    sfx('slip');
+    addText(player.x, player.y - 40, '打滑！', '#ffd166', 1.1);
+    mood = clamp(mood - 3, 0, 100);
+    if (speed > MAXV * 0.88 && falls < 3 && Math.random() < 0.35) {
+      player.slipT = 0;
+      player.fallT = 1.5;
+      player.stun = 1.5;
+      player.vx *= 0.15; player.vy *= 0.15;
+      if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 2.5);
+      falls++;
+      mood = clamp(mood - 12, 0, 100);
+      shake(20);
+      sfx('fall');
+      burst(player.x, player.y, 18, '#cfd8e3', 1.1);
+      addText(player.x, player.y - 46, '摔车了！', '#ff8787', 1.5);
+      addText(player.x, player.y - 80, '餐没洒，你扶起车', '#8ce99a', 1.0, 0.9);
+    }
+  }
+
+  function updatePlayer(dt) {
+    if (player.invuln > 0) player.invuln -= dt;
+    if (player.fallT > 0) player.fallT -= dt;
+
+    let ix = 0, iy = 0;
+    if (player.stun > 0 || bikeDown > 0) {
+      if (player.stun > 0) player.stun -= dt;
+    } else {
+      const v = inputVec();
+      ix = v.x; iy = v.y;
+    }
+    if (player.slipT > 0) {
+      player.slipT -= dt;
+      ix *= 0.15; iy *= 0.15;
+    }
+    if (heatT > 0) { ix *= 0.7; iy *= 0.7; }
+
+    let maxV = MAXV * wx.speed;
+    if (pushing) maxV = Math.min(maxV, PUSH_V);
+    if (mood < 25) maxV *= 0.93;
+
+    const grip = wx.grip * (mood < 25 ? 0.9 : 1);
+    const k = 1 - Math.exp(-(10 * grip) * dt);
+    player.vx = lerp(player.vx, ix * maxV, k);
+    player.vy = lerp(player.vy, iy * maxV, k);
+
+    // 大风：持续侧推 + 阵风
+    if (wx.wind > 0) {
+      const gust = gustT > 0 ? gustPower : 0;
+      player.vx += (wx.wind * 42 + gust * 240 * gustDir) * dt;
+      player.vy += (wx.wind * 14 * gustDir) * dt;
+    }
+
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+    player.x = clamp(player.x, PR + 2, WORLD_W - PR - 2);
+    player.y = clamp(player.y, PR + 2, WORLD_H - PR - 2);
+
+    for (let i = 0; i < buildings.length; i++) resolveCircleRect(player, buildings[i].g);
+
+    const sp = Math.hypot(player.vx, player.vy);
+    if (sp > 18) {
+      const target = Math.atan2(player.vy, player.vx);
+      player.angle += shortAngle(player.angle, target) * (1 - Math.exp(-14 * dt));
+    }
+    if (sp > 130 && Math.random() < dt * 26) spawnDust();
+
+    // 湿滑路面：高速急转 → 打滑
+    if (wx.slip > 0 && player.slipT <= 0 && player.fallT <= 0 && sp > maxV * 0.78 && (ix || iy)) {
+      const vAng = Math.atan2(player.vy, player.vx);
+      const iAng = Math.atan2(iy, ix);
+      if (Math.abs(shortAngle(vAng, iAng)) > 0.95 && Math.random() < dt * 0.4 * wx.slip) {
+        startSlip(sp);
+      }
+    }
+
+    // 电量消耗
+    if (!pushing) {
+      battery -= (0.22 + (sp / MAXV) * 0.62) * dt;
+      if (battery <= 0) {
+        battery = 0;
+        pushing = true;
+        sfx('dead');
+        banner('电瓶没电了 · 只能推着走');
+        mood = clamp(mood - 10, 0, 100);
+      } else if (battery < 18 && battery + 0.02 > 18) {
+        banner('电量不足');
+      }
+    }
+  }
+
+  function updateCars(dt) {
+    for (let i = 0; i < cars.length; i++) {
+      const c = cars[i];
+      const green = axisInfo(c.axis).c === 'g';
+      const centers = c.axis === 'h' ? XS : YS;
+      const front = c.t + c.dir * 29;
+      let target = c.speed;
+      if (wx.rain || wx.snow) target *= 0.82;
+
+      if (!green) {
+        let best = Infinity;
+        for (let k = 0; k < centers.length; k++) {
+          const si = c.axis === 'h' ? k : c.road;
+          const sj = c.axis === 'h' ? c.road : k;
+          if (!isSignal(si, sj)) continue;   // 普通路口不停
+          const stopLine = centers[k] - c.dir * 56;
+          const d = (stopLine - front) * c.dir;
+          if (d > 6 && d < best) best = d;
+        }
+        if (best < 240) target = 0;
+      }
+
+      let gap = Infinity;
+      for (let k = 0; k < cars.length; k++) {
+        const o = cars[k];
+        if (o === c || o.axis !== c.axis || o.dir !== c.dir) continue;
+        if (Math.abs(o.fixed - c.fixed) > 3) continue;
+        const d = (o.t - c.t) * c.dir;
+        if (d > 0 && d < gap) gap = d;
+      }
+      if (gap < 78) target = Math.min(target, Math.max(0, (gap - 42) * 3.2));
+
+      c.v += (target - c.v) * (1 - Math.exp(-3.6 * dt));
+      if (c.v < 2) c.v = 0;
+      c.t += c.dir * c.v * dt;
+
+      const span = c.axis === 'h' ? WORLD_W : WORLD_H;
+      if (c.t > span + 90) c.t = -90;
+      if (c.t < -90) c.t = span + 90;
+    }
+  }
+
+  function crashWith(c) {
+    if (player.invuln > 0) return;
+    const r = carRect(c);
+    let nx = player.x - (r.x + r.w / 2);
+    let ny = player.y - (r.y + r.h / 2);
+    const m = Math.hypot(nx, ny) || 1;
+    nx /= m; ny /= m;
+
+    player.invuln = 1.4;
+    player.stun = 0.34;
+    player.vx = nx * 420;
+    player.vy = ny * 420;
+
+    if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 1.8);
+    mood = clamp(mood - 8, 0, 100);
+    shake(15);
+    sfx('crash');
+    addText(player.x, player.y - 34, '被车撞了！', '#ff6b6b', 1.1);
+    burst(player.x, player.y, 14, '#ffd166', 0.9);
+  }
+
+  function checkCarHits() {
+    for (let i = 0; i < cars.length; i++) {
+      const r = carRect(cars[i]);
+      const cx = clamp(player.x, r.x, r.x + r.w);
+      const cy = clamp(player.y, r.y, r.y + r.h);
+      const dx = player.x - cx, dy = player.y - cy;
+      if (dx * dx + dy * dy < PR * PR) { crashWith(cars[i]); return; }
+    }
+  }
+
+  function checkLights() {
+    let ci = -1, cj = -1;
+    for (let i = 0; i <= COLS; i++) {
+      if (Math.abs(player.x - XS[i]) < HALF_ROAD - 2) { ci = i; break; }
+    }
+    if (ci >= 0) {
+      for (let j = 0; j <= ROWS; j++) {
+        if (Math.abs(player.y - YS[j]) < HALF_ROAD - 2) { cj = j; break; }
+      }
+    }
+    const entering = (ci >= 0 && cj >= 0) && (ci !== player.lightI || cj !== player.lightJ);
+    player.lightI = ci;
+    player.lightJ = cj;
+    if (!entering) return;
+    if (!isSignal(ci, cj)) return;   // 没装灯的路口不管
+
+    const sp = Math.hypot(player.vx, player.vy);
+    if (sp < 40) return;
+    const axis = Math.abs(player.vx) > Math.abs(player.vy) ? 'h' : 'v';
+    const info = axisInfo(axis);
+    if (info.c !== 'r') return;   // 黄灯也放行，别太苛刻
+
+    violations++;
+    mood = clamp(mood - 4, 0, 100);
+    if (Math.random() < 0.18) {
+      const f = 10;
+      fines += f;
+      money = Math.max(0, money - f);
+      addText(player.x, player.y - 50, '闯红灯 · 罚款 ¥' + f, '#ff8787', 1.05);
+      sfx('fine');
+    } else {
+      addText(player.x, player.y - 50, '闯红灯', '#ffa94d', 1.0);
+    }
+  }
+
+  function updateBike(dt) {
+    if (kickCd > 0) kickCd -= dt;
+    if (bikeDown > 0) {
+      bikeDown -= dt;
+      if (bikeDown <= 0) { bikeDown = 0; addText(player.x, player.y - 40, '车又能走了', '#8ce99a', 1); }
+      return;
+    }
+    // 最忙的时候抛锚：越接近超时越容易
+    if (order && order.state === 'deliver' && !order.brokeOnce) {
+      const urgency = 1 - clamp(order.timeLeft / order.timeLimit, 0, 1);
+      if (urgency > 0.55 && Math.random() < dt * 0.008 * (0.6 + urgency)) {
+        order.brokeOnce = true;
+        bikeDown = 4.4;
+        player.vx *= 0.15; player.vy *= 0.15;
+        mood = clamp(mood - 14, 0, 100);
+        shake(16);
+        sfx('dead');
+        addText(player.x, player.y - 44, '车抛锚了！', '#ff8787', 1.5);
+        addText(player.x, player.y - 76, '按 E 踹两脚', '#ffd8a8', 1.0, 0.5);
+      }
+    }
+  }
+
+  function updateMood(dt) {
+    if (breakdownT > 0) {
+      breakdownT -= dt;
+      return;
+    }
+    if (mood <= 0) {
+      breakdownT = 3.2;
+      player.stun = 3.2;
+      player.vx = 0; player.vy = 0;
+      shake(10);
+      sfx('fall');
+      addText(player.x, player.y - 40, '你把车停在路边', '#cbd5e1', 1.1);
+      addText(player.x, player.y - 68, '手在抖，喘不上气', '#cbd5e1', 1.0, 0.7);
+      addText(player.x, player.y - 96, '……缓一缓', '#8ce99a', 1.0, 1.5);
+      mood = 34;
+      return;
+    }
+    if (mood < 100) mood = Math.min(100, mood + 0.9 * dt);
+  }
+
+  function updateWind(dt) {
+    if (wx.wind <= 0) { gustT = 0; gustPower = 0; return; }
+    if (gustT > 0) {
+      gustT -= dt;
+      gustPower = Math.min(1, gustPower + dt * 3);
+      return;
+    }
+    gustPower = Math.max(0, gustPower - dt * 1.5);
+    if (Math.random() < dt * 0.14) {
+      gustT = 1.3;
+      gustDir = Math.random() < 0.5 ? -1 : 1;
+      gustPower = 0.4;
+      sfx('wind');
+      addText(player.x, player.y - 44, '一阵横风！', '#cbd5e1', 1.0);
+    }
+  }
+
+  function updateHeat(dt) {
+    if (!(wxKey === 'heat')) return;
+    if (heatT > 0) { heatT -= dt; return; }
+    if (Math.random() < dt * 0.1) {
+      heatT = 1.6;
+      mood = clamp(mood - 4, 0, 100);
+      addText(player.x, player.y - 44, '眼前有点发黑', '#ffb86b', 1.0);
+    }
+  }
+
+  function updateNight() {
+    night = clamp((elapsed - 80) / 100, 0, 1);
+  }
+
+  function updateOrder(dt) {
+    if (!order) return;
+    order.timeLeft -= dt;
+    if (order.rejectT > 0) order.rejectT -= dt;
+
+    if (order.timeLeft <= 0) { failOrder(); return; }
+
+    const secs = Math.ceil(order.timeLeft);
+    if (secs !== order.lastSec) {
+      order.lastSec = secs;
+      if (secs <= 5 && secs > 0) sfx('tick');
+    }
+
+    if (order.state === 'pickup') {
+      if (Math.hypot(player.x - order.pickup.x, player.y - order.pickup.y) < ZONE) arriveShop();
+      return;
+    }
+
+    if (order.state === 'waiting') {
+      order.wait -= dt;
+      if (order.wait <= 0) pickedUp();
+      return;
+    }
+
+    if (Math.hypot(player.x - order.drop.x, player.y - order.drop.y) < ZONE) { deliver(); return; }
+
+    if (order.callT > 0) {
+      order.callT -= dt;
+      if (order.callT <= 0) {
+        order.annoy++;
+        mood = clamp(mood - 5, 0, 100);
+        sfx('hang');
+        addText(player.x, player.y - 56, '顾客挂断了', '#ff8787', 0.95);
+        order.nextCall = rand(7, 13);
+      }
+    } else {
+      order.nextCall -= dt;
+      if (order.nextCall <= 0) { order.callT = 5; sfx('call'); }
+    }
+  }
+
+  function updateCamera(dt) {
+    if (state === 'menu') {
+      const t = clock * 0.16;
+      cam.tx = WORLD_W / 2 + Math.cos(t) * 320;
+      cam.ty = WORLD_H / 2 + Math.sin(t * 1.25) * 240;
+    } else {
+      cam.tx = player.x + player.vx * 0.2;
+      cam.ty = player.y + player.vy * 0.2;
+    }
+    const k = 1 - Math.exp(-(state === 'menu' ? 2.4 : 7) * dt);
+    cam.x = lerp(cam.x, cam.tx, k);
+    cam.y = lerp(cam.y, cam.ty, k);
+
+    const z = zoom();
+    const halfW = W / (2 * z), halfH = H / (2 * z);
+    cam.x = WORLD_W <= halfW * 2 ? WORLD_W / 2 : clamp(cam.x, halfW, WORLD_W - halfW);
+    cam.y = WORLD_H <= halfH * 2 ? WORLD_H / 2 : clamp(cam.y, halfH, WORLD_H - halfH);
+  }
+
+  function update(dt) {
+    clock += dt;
+    if (state === 'playing') {
+      elapsed += dt;
+      updateNight();
+      updateWind(dt);
+      updateHeat(dt);
+      updatePlayer(dt);
+      updateCars(dt);
+      checkCarHits();
+      checkLights();
+      updateOrder(dt);
+      updateBike(dt);
+      updateMood(dt);
+      // 等灯时，绿灯亮起给一声轻提示
+      const ca = axisInfo(playerAxis()).c;
+      if (ca === 'g' && lastLCol && lastLCol !== 'g' && Math.hypot(player.vx, player.vy) < 70) sfx('bell');
+      lastLCol = ca;
+      if (wxKey === 'storm' && Math.random() < dt * 0.09) flashT = 0.14;
+    } else if (state === 'menu') {
+      updateCars(dt);
+    }
+    updatePrecip(dt);
+    updateEffects(dt);
+    updateCamera(dt);
+  }
+
+  /* =========================================================
+     绘制：世界
+  ========================================================= */
+  function drawGround() {
+    let road = '#383d47';
+    if (wx.rain || wx.snow) road = '#333843';
+    ctx.fillStyle = road;
+    ctx.fillRect(-260, -260, WORLD_W + 520, WORLD_H + 520);
+
+    ctx.strokeStyle = 'rgba(235,240,250,0.20)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([22, 26]);
+    ctx.beginPath();
+    for (let j = 0; j <= ROWS; j++) {
+      const y = roadCenterY(j);
+      for (let i = 0; i < COLS; i++) {
+        const x0 = blockX(i);
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x0 + BLOCK_W, y);
+      }
+    }
+    for (let i = 0; i <= COLS; i++) {
+      const x = roadCenterX(i);
+      for (let j = 0; j < ROWS; j++) {
+        const y0 = blockY(j);
+        ctx.moveTo(x, y0);
+        ctx.lineTo(x, y0 + BLOCK_H);
+      }
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(-3, -3, WORLD_W + 6, WORLD_H + 6);
+  }
+
+  function drawBlocks() {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      const g = b.g;
+
+      ctx.fillStyle = '#5d646f';
+      rr(g.x - 12, g.y - 12, g.w + 24, g.h + 24, 14);
+      ctx.fill();
+
+      if (b.type === 'park') {
+        ctx.fillStyle = '#4c8b58';
+        rr(g.x, g.y, g.w, g.h, 10);
+        ctx.fill();
+
+        ctx.fillStyle = '#c9b48a';
+        rr(g.x + g.w * 0.43, g.y + 8, g.w * 0.14, g.h - 16, 6);
+        ctx.fill();
+        rr(g.x + 8, g.y + g.h * 0.44, g.w - 16, g.h * 0.12, 6);
+        ctx.fill();
+
+        for (let k = 0; k < b.trees.length; k++) {
+          const t = b.trees[k];
+          ctx.fillStyle = 'rgba(0,0,0,0.24)';
+          ctx.beginPath(); ctx.arc(t.x + 4, t.y + 5, t.r, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#2f6b3d';
+          ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#3f8a4f';
+          ctx.beginPath(); ctx.arc(t.x - t.r * 0.26, t.y - t.r * 0.26, t.r * 0.6, 0, TAU); ctx.fill();
+        }
+
+        ctx.strokeStyle = 'rgba(0,0,0,0.16)';
+        ctx.lineWidth = 4;
+        rr(g.x, g.y, g.w, g.h, 10);
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = 'rgba(0,0,0,0.30)';
+        rr(g.x + 7, g.y + 9, g.w, g.h, 12);
+        ctx.fill();
+
+        ctx.fillStyle = b.base;
+        rr(g.x, g.y, g.w, g.h, 12);
+        ctx.fill();
+
+        ctx.fillStyle = b.roof;
+        rr(g.x + 9, g.y + 9, g.w - 18, g.h - 18, 9);
+        ctx.fill();
+
+        ctx.fillStyle = b.roofD;
+        for (let k = 0; k < b.details.length; k++) {
+          const d = b.details[k];
+          rr(d.x, d.y, d.w, d.h, 4);
+          ctx.fill();
+        }
+
+        // 夜里亮着的窗
+        if (night > 0.05) {
+          for (let k = 0; k < b.wins.length; k++) {
+            const w = b.wins[k];
+            const flick = 0.75 + 0.25 * Math.sin(clock * 0.7 + w.ph);
+            ctx.fillStyle = 'rgba(255,213,130,' + (night * 0.75 * flick) + ')';
+            rr(w.x, w.y, w.w, w.h, 2);
+            ctx.fill();
+          }
+        }
+
+        ctx.strokeStyle = b.edge;
+        ctx.lineWidth = 2;
+        rr(g.x + 0.5, g.y + 0.5, g.w - 1, g.h - 1, 12);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 单个方向的路口引导：停止线 + 路面箭头 + 读秒
+  function drawApproach(bx, by, ang, col, num) {
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(ang);
+
+    // 停止线
+    ctx.fillStyle = hexA(col, 0.9);
+    rr(-2.5, -21, 5, 42, 2);
+    ctx.fill();
+
+    // 箭头（指向可行驶方向，拉长到一眼能看出车道走向）
+    ctx.fillStyle = hexA(col, 0.85);
+    ctx.beginPath();
+    ctx.moveTo(-12, 0);
+    ctx.lineTo(-30, -10.5);
+    ctx.lineTo(-30, -4.2);
+    ctx.lineTo(-84, -4.2);
+    ctx.lineTo(-84, 4.2);
+    ctx.lineTo(-30, 4.2);
+    ctx.lineTo(-30, 10.5);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+
+    // 读秒牌（不随箭头旋转，方便读）
+    if (num != null) {
+      const px = bx + Math.cos(ang + Math.PI / 2) * 30;
+      const py = by + Math.sin(ang + Math.PI / 2) * 30;
+      ctx.font = '800 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const tw = ctx.measureText(num).width;
+      const w = tw + 12 * UI, h = 19 * UI;
+      ctx.fillStyle = 'rgba(10,14,20,0.80)';
+      rr(px - w / 2, py - h / 2, w, h, h / 2);
+      ctx.fill();
+      ctx.fillStyle = col;
+      ctx.fillText(num, px, py + 1);
+      ctx.textBaseline = 'alphabetic';
+    }
+  }
+
+  function drawLights() {
+    const z = zoom();
+    const viewW = W / (2 * z) + 140, viewH = H / (2 * z) + 140;
+    const hi = axisInfo('h'), vi = axisInfo('v');
+    const hCol = COLOR_HEX[hi.c];
+    const vCol = COLOR_HEX[vi.c];
+
+    // 先找出离玩家最近的“有灯”路口，只有它显示读秒，避免满屏数字
+    let ni = -1, nj = -1, nd = 1e9;
+    for (let j = 0; j <= ROWS; j++) {
+      for (let i = 0; i <= COLS; i++) {
+        if (!isSignal(i, j)) continue;
+        const d = Math.hypot(XS[i] - player.x, YS[j] - player.y);
+        if (d < nd) { nd = d; ni = i; nj = j; }
+      }
+    }
+    const showNums = nd < 340;
+
+    for (let j = 0; j <= ROWS; j++) {
+      for (let i = 0; i <= COLS; i++) {
+        if (!isSignal(i, j)) continue;
+        const cx = XS[i], cy = YS[j];
+        if (Math.abs(cx - cam.x) > viewW || Math.abs(cy - cam.y) > viewH) continue;
+
+        // 离玩家越远，箭头越淡，避免满屏花花绿绿
+        const d = Math.hypot(cx - player.x, cy - player.y);
+        ctx.globalAlpha = clamp(1.2 - d / 820, 0.28, 1);
+
+        const near = showNums && i === ni && j === nj;
+        const hNum = near ? String(Math.ceil(hi.left)) : null;
+        const vNum = near ? String(Math.ceil(vi.left)) : null;
+
+        // 东行（+x）：右车道在下方，停止线在路口西侧
+        drawApproach(cx - 56, cy + 24, 0, hCol, hNum);
+        // 西行（-x）：停止线在路口东侧
+        drawApproach(cx + 56, cy - 24, Math.PI, hCol, hNum);
+        // 南行（+y）：停止线在路口北侧
+        drawApproach(cx - 24, cy - 56, Math.PI / 2, vCol, vNum);
+        // 北行（-y）：停止线在路口南侧
+        drawApproach(cx + 24, cy + 56, -Math.PI / 2, vCol, vNum);
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawBeacon(x, y, color, label) {
+    const pulse = (Math.sin(clock * 4.2) + 1) / 2;
+
+    ctx.strokeStyle = hexA(color, 0.30);
+    ctx.lineWidth = 2.5;
+    ctx.setLineDash([7, 9]);
+    ctx.beginPath();
+    ctx.arc(x, y, ZONE, 0, TAU);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.strokeStyle = hexA(color, 0.45 * (1 - pulse));
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 20 + pulse * 18, 0, TAU);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + 3, 14, 7, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(x, y - 30 - Math.sin(clock * 3) * 3);
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(-7, 12);
+    ctx.lineTo(7, 12);
+    ctx.lineTo(0, 24);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 17, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.fillStyle = '#1b1205';
+    ctx.font = 'bold 17px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 0, 1);
+    ctx.restore();
+  }
+
+  function drawGuide() {
+    if (!order || state !== 'playing') return;
+    const t = order.state === 'deliver' ? order.drop : order.pickup;
+    const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+
+    ctx.save();
+    ctx.strokeStyle = hexA(col, 0.22);
+    ctx.lineWidth = 3;
+    ctx.setLineDash([11, 15]);
+    ctx.lineDashOffset = -clock * 46;
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.lineTo(t.x, t.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawGoals() {
+    if (!order) return;
+    const t = order.state === 'deliver' ? order.drop : order.pickup;
+    const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+    drawBeacon(t.x, t.y, col, order.state === 'deliver' ? '送' : '取');
+  }
+
+  function drawWaitGauge() {
+    if (!order || order.state !== 'waiting') return;
+    const p = 1 - clamp(order.wait / order.waitMax, 0, 1);
+    const x = player.x, y = player.y + 54;
+    ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+    ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(x, y, 14, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = '#ffb86b';
+    ctx.beginPath(); ctx.arc(x, y, 14, -Math.PI / 2, -Math.PI / 2 + TAU * p); ctx.stroke();
+  }
+
+  function drawCars() {
+    for (let i = 0; i < cars.length; i++) {
+      const c = cars[i];
+      const r = carRect(c);
+      ctx.save();
+      ctx.translate(r.x + r.w / 2, r.y + r.h / 2);
+      if (c.axis === 'v') ctx.rotate(Math.PI / 2);
+      if (c.dir < 0) ctx.rotate(Math.PI);
+
+      ctx.fillStyle = 'rgba(0,0,0,0.30)';
+      rr(-27, -13, 58, 30, 9); ctx.fill();
+
+      ctx.fillStyle = c.color;
+      rr(-29, -15, 58, 30, 9); ctx.fill();
+
+      ctx.fillStyle = 'rgba(16,24,38,0.5)';
+      rr(3, -11, 13, 22, 4); ctx.fill();
+      ctx.fillStyle = 'rgba(16,24,38,0.3)';
+      rr(-15, -10, 9, 20, 3); ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.14)';
+      rr(-8, -11, 24, 22, 5); ctx.fill();
+
+      const braking = c.v < 8;
+      ctx.fillStyle = '#ffe9a8';
+      rr(26, -12, 3, 6, 1.5); ctx.fill();
+      rr(26, 6, 3, 6, 1.5); ctx.fill();
+      ctx.fillStyle = braking ? '#ff3b30' : '#ff5a4d';
+      rr(-29, -12, 3, 6, 1.5); ctx.fill();
+      rr(-29, 6, 3, 6, 1.5); ctx.fill();
+
+      ctx.restore();
+    }
+  }
+
+  function drawPlayer() {
+    const p = player;
+    ctx.save();
+    ctx.translate(p.x, p.y);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';
+    ctx.beginPath();
+    ctx.ellipse(2, 4, 18, 12, 0, 0, TAU);
+    ctx.fill();
+
+    if (p.invuln > 0 && Math.floor(clock * 22) % 2 === 0) ctx.globalAlpha = 0.45;
+
+    const fallen = p.fallT > 0;
+
+    if (fallen) {
+      ctx.rotate(p.angle + 1.35);
+      ctx.globalAlpha *= 0.9;
+    } else {
+      ctx.translate(0, -3);
+      ctx.rotate(p.angle);
+    }
+
+    ctx.fillStyle = '#141a24';
+    rr(-17, -4.5, 9, 9, 4); ctx.fill();
+    rr(8, -4.5, 9, 9, 4); ctx.fill();
+
+    ctx.fillStyle = '#b8461a';
+    rr(-16.5, -9, 33, 18, 9); ctx.fill();
+    ctx.fillStyle = '#ff7a2f';
+    rr(-15.5, -8, 31, 16, 8); ctx.fill();
+
+    ctx.fillStyle = '#ffb066';
+    rr(3, -6.5, 11, 13, 6); ctx.fill();
+    ctx.fillStyle = 'rgba(205,232,255,0.85)';
+    rr(10.5, -4.5, 3.5, 9, 1.7); ctx.fill();
+
+    ctx.fillStyle = '#18895a';
+    rr(-18.5, -10, 12, 20, 4.5); ctx.fill();
+    ctx.fillStyle = '#eafff5';
+    rr(-16.5, -6.5, 7.5, 13, 2.5); ctx.fill();
+    if (order && order.state === 'deliver') {
+      ctx.fillStyle = '#ffb066';
+      rr(-15, -2.5, 5, 5, 1.5); ctx.fill();
+    }
+
+    ctx.fillStyle = '#27314c';
+    ctx.beginPath(); ctx.arc(-2, 0, 8.4, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ffd43b';
+    ctx.beginPath(); ctx.arc(-2, 0, 7.1, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#2a3450';
+    rr(1.5, -4.2, 5.5, 8.4, 2.4); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.arc(-4.2, -3, 2, 0, TAU); ctx.fill();
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  function drawEffects() {
+    for (let i = 0; i < rings.length; i++) {
+      const r = rings[i];
+      ctx.strokeStyle = hexA(r.color, (r.life / r.max) * 0.7);
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, TAU); ctx.stroke();
+    }
+    for (let i = 0; i < particles.length; i++) {
+      const p = particles[i];
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+
+    for (let i = 0; i < texts.length; i++) {
+      const t = texts[i];
+      if (t.delay > 0) continue;
+      ctx.globalAlpha = clamp(t.life / t.max, 0, 1);
+      ctx.fillStyle = t.color;
+      ctx.font = '800 ' + Math.round(17 * t.scale) + 'px ' + FONT;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(t.text, t.x, t.y);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* =========================================================
+     绘制：天气 / 夜晚覆盖
+  ========================================================= */
+  function drawNight() {
+    if (night <= 0.02) return;
+    const z = zoom();
+    const px = (player.x - cam.x) * z + W / 2;
+    const py = (player.y - cam.y) * z + H / 2;
+    const lit = 1 + (order && order.state === 'deliver' ? 0.1 : 0);
+    const r0 = 70 * z * lit;
+    const r1 = 330 * z;
+
+    const g = ctx.createRadialGradient(px, py, r0, px, py, r1);
+    g.addColorStop(0, 'rgba(6,9,18,0)');
+    g.addColorStop(0.45, 'rgba(6,9,18,' + (0.30 * night).toFixed(3) + ')');
+    g.addColorStop(1, 'rgba(4,6,14,' + (0.80 * night).toFixed(3) + ')');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // 车灯前的一小片亮
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(player.angle);
+    const lg = ctx.createLinearGradient(30, 0, 230 * z, 0);
+    lg.addColorStop(0, 'rgba(255,240,200,' + (0.16 * night).toFixed(3) + ')');
+    lg.addColorStop(1, 'rgba(255,240,200,0)');
+    ctx.fillStyle = lg;
+    ctx.beginPath();
+    ctx.moveTo(16, -10);
+    ctx.lineTo(230 * z, -70 * z);
+    ctx.lineTo(230 * z, 70 * z);
+    ctx.lineTo(16, 10);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawWeather() {
+    if (drops.length) {
+      ctx.strokeStyle = 'rgba(190,215,255,0.55)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      const windK = 0.24 + wx.wind * 0.55 + (gustT > 0 ? 0.6 : 0);
+      for (let i = 0; i < drops.length; i++) {
+        const d = drops[i];
+        ctx.globalAlpha = d.a;
+        ctx.moveTo(d.x, d.y);
+        ctx.lineTo(d.x - d.len * windK, d.y + d.len);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (flakes.length) {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      for (let i = 0; i < flakes.length; i++) {
+        const f = flakes[i];
+        ctx.beginPath(); ctx.arc(f.x, f.y, f.r, 0, TAU); ctx.fill();
+      }
+    }
+    if (streaks.length) {
+      ctx.strokeStyle = 'rgba(230,240,255,0.5)';
+      ctx.lineWidth = 1.2;
+      for (let i = 0; i < streaks.length; i++) {
+        const s = streaks[i];
+        ctx.globalAlpha = s.a * (0.4 + gustPower);
+        ctx.beginPath();
+        ctx.moveTo(s.x, s.y);
+        ctx.lineTo(s.x - s.len, s.y + 3);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (wx.tint !== 'rgba(0,0,0,0)') {
+      ctx.fillStyle = wx.tint;
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (flashT > 0) {
+      ctx.fillStyle = 'rgba(200,220,255,' + (flashT * 1.6) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  function drawVignette() {
+    const g = ctx.createRadialGradient(
+      W / 2, H / 2, Math.min(W, H) * 0.32,
+      W / 2, H / 2, Math.max(W, H) * 0.8
+    );
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    const edge = wx.rain ? 'rgba(4,8,16,0.62)' : 'rgba(0,0,0,0.45)';
+    g.addColorStop(1, edge);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  /* =========================================================
+     绘制：HUD
+  ========================================================= */
+  function panel(x, y, w, h, r) {
+    ctx.fillStyle = 'rgba(14,18,26,0.72)';
+    rr(x, y, w, h, r || 14);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  function bar(x, y, w, h, p, col) {
+    ctx.fillStyle = 'rgba(255,255,255,0.10)';
+    rr(x, y, w, h, h / 2); ctx.fill();
+    ctx.fillStyle = col;
+    rr(x, y, Math.max(h, w * clamp(p, 0, 1)), h, h / 2); ctx.fill();
+  }
+
+  function drawHUD() {
+    if (!order) return;
+    ctx.save();
+    ctx.textBaseline = 'alphabetic';
+
+    const narrow = W < 660;
+    const px = (narrow ? 12 : 16) * UI;
+    const py = (narrow ? 12 : 16) * UI;
+    const pw = (narrow ? 158 : 208) * UI;
+    const ph = (narrow ? 120 : 126) * UI;
+
+    panel(px, py, pw, ph);
+    hudBoxes.panel = { x: px, y: py, w: pw, h: ph };
+
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#8b98a8';
+    ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText('今日收入', px + 14 * UI, py + 19 * UI);
+
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold ' + (24 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText('¥ ' + money, px + 14 * UI, py + 44 * UI);
+
+    ctx.fillStyle = '#8b98a8';
+    ctx.font = '600 ' + (10.2 * UI).toFixed(1) + 'px ' + FONT;
+    const line = '完成 ' + ordersDone + ' 单';
+    ctx.fillText(line, px + 14 * UI, py + 60 * UI);
+    if (combo >= 2) {
+      const lineW = ctx.measureText(line).width;
+      ctx.fillStyle = '#ffb86b';
+      ctx.fillText(' · 连击 x' + combo, px + 14 * UI + lineW, py + 60 * UI);
+    }
+
+    ctx.fillStyle = fines > 0 ? '#ff8787' : '#6f7b8c';
+    ctx.font = '600 ' + (9.6 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText((wx.cn || '晴') + ' · 罚款 ¥' + fines, px + 14 * UI, py + 75 * UI);
+
+    // 电量
+    const bw = pw - 74 * UI;
+    ctx.fillStyle = '#8b98a8';
+    ctx.font = '600 ' + (9.4 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText('电量', px + 14 * UI, py + 91 * UI);
+    const batCol = battery < 20 ? '#ff6b6b' : battery < 45 ? '#fcc419' : '#51cf66';
+    bar(px + 52 * UI, py + 84 * UI, bw, 7 * UI, battery / 100, pushing ? '#ff6b6b' : batCol);
+
+    // 情绪
+    ctx.fillStyle = '#8b98a8';
+    ctx.fillText('情绪', px + 14 * UI, py + 107 * UI);
+    const moodCol = mood < 25 ? '#ff6b6b' : mood < 50 ? '#fcc419' : '#4dabf7';
+    bar(px + 52 * UI, py + 100 * UI, bw, 7 * UI, mood / 100, moodCol);
+
+    if (pushing) {
+      ctx.fillStyle = '#ff8787';
+      ctx.fillText('推车中', px + 14 * UI, py + ph + 14 * UI);
+    }
+
+    /* ---- 好评星 ---- */
+    if (narrow) {
+      const sy = py + 20 * UI;
+      for (let i = 0; i < 3; i++) {
+        star(px + pw + 18 * UI + i * 20 * UI, sy, 7.5 * UI, i < lives ? '#ffd43b' : 'rgba(255,255,255,0.14)');
+      }
+    } else {
+      const sy = py + ph + 22 * UI;
+      ctx.fillStyle = '#8b98a8';
+      ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('好评', px + 2 * UI, sy + 4 * UI);
+      for (let i = 0; i < 3; i++) {
+        star(px + 42 * UI + i * 26 * UI, sy, 9.5 * UI, i < lives ? '#ffd43b' : 'rgba(255,255,255,0.14)');
+      }
+    }
+
+    /* ---- 订单卡 ---- */
+    let cw, ch, cx0, cy0;
+    if (narrow) {
+      cw = W - 24 * UI;
+      ch = 62 * UI;
+      cx0 = 12 * UI;
+      cy0 = py + ph + 12 * UI;
+    } else {
+      cw = clamp(W * 0.36, 250, 390 * UI);
+      ch = 66 * UI;
+      cx0 = W / 2 - cw / 2;
+      cy0 = 14 * UI;
+    }
+    panel(cx0, cy0, cw, ch, 16 * UI);
+    hudBoxes.card = { x: cx0, y: cy0, w: cw, h: ch };
+
+    // 我这方向的红绿灯读秒
+    const pa = axisInfo(playerAxis());
+    const chipText = (pa.c === 'g' ? '绿 ' : pa.c === 'y' ? '黄 ' : '红 ') + Math.max(1, Math.ceil(pa.left)) + 's';
+    ctx.font = '800 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+    const chipW = ctx.measureText(chipText).width + 26 * UI;
+    const chipH = 18 * UI;
+    let chipX, chipY;
+    if (narrow) {
+      chipX = W / 2 - chipW / 2;
+      chipY = cy0 + ch + 50 * UI;
+    } else {
+      chipX = cx0 + 10 * UI;
+      chipY = cy0 - chipH / 2;
+    }
+    ctx.fillStyle = 'rgba(12,16,24,0.94)';
+    rr(chipX, chipY, chipW, chipH, chipH / 2);
+    ctx.fill();
+    ctx.strokeStyle = hexA(COLOR_HEX[pa.c], 0.55);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = COLOR_HEX[pa.c];
+    ctx.beginPath();
+    ctx.arc(chipX + 11 * UI, chipY + chipH / 2, 3.6 * UI, 0, TAU);
+    ctx.fill();
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.font = '800 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText(chipText, chipX + 19 * UI, chipY + chipH / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
+
+    const ratio = clamp(order.timeLeft / order.timeLimit, 0, 1);
+    const col = ratio > 0.5 ? '#51cf66' : ratio > 0.25 ? '#fcc419' : '#ff6b6b';
+
+    let label = order.state === 'waiting' ? '等商家出餐'
+      : order.state === 'pickup' ? '前往取餐点' : '送往顾客';
+    if (bikeDown > 0) label = '车抛锚了 · 踹两脚';
+    const dotCol = (order.state === 'waiting' || bikeDown > 0) ? '#ffb86b' : col;
+
+    ctx.fillStyle = dotCol;
+    ctx.beginPath();
+    ctx.arc(cx0 + 22 * UI, cy0 + 24 * UI, 6 * UI, 0, TAU);
+    ctx.fill();
+
+    ctx.fillStyle = '#e8edf5';
+    ctx.font = '700 ' + (15 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.textAlign = 'left';
+    ctx.fillText(label, cx0 + 38 * UI, cy0 + 29 * UI);
+
+    const tgt = order.state === 'deliver' ? order.drop : order.pickup;
+    const meters = Math.max(1, Math.round(Math.hypot(player.x - tgt.x, player.y - tgt.y) / 9));
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#9aa4b2';
+    ctx.font = '600 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText((order.state === 'waiting' || bikeDown > 0) ? '' : meters + ' 米', cx0 + cw - 18 * UI, cy0 + 29 * UI);
+
+    const bx = cx0 + 18 * UI, by = cy0 + 44 * UI;
+    const bwid = cw - 36 * UI, bh = 8 * UI;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    rr(bx, by, bwid, bh, bh / 2); ctx.fill();
+    ctx.fillStyle = col;
+    rr(bx, by, Math.max(bh, bwid * ratio), bh, bh / 2); ctx.fill();
+
+    // 垃圾单标记
+    if (order.junk) {
+      ctx.fillStyle = 'rgba(200,50,50,0.95)';
+      const tw = 46 * UI, th = 17 * UI;
+      rr(cx0 + cw - tw - 10 * UI, cy0 - th / 2 - 1, tw, th, 8 * UI);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 ' + (10 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('垃圾单', cx0 + cw - tw / 2 - 10 * UI, cy0 + 1);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    /* ---- 车速 ---- */
+    const spd = Math.hypot(player.vx, player.vy) / MAXV * 45;
+    const over = spd > 38;
+    const sw = 104 * UI, sh = 30 * UI;
+    const sx = W / 2 - sw / 2;
+    const sy2 = narrow ? (cy0 + ch + 12 * UI) : (H - 52 * UI);
+    ctx.fillStyle = 'rgba(14,18,26,0.66)';
+    rr(sx, sy2, sw, sh, sh / 2); ctx.fill();
+    hudBoxes.speed = { x: sx, y: sy2, w: sw, h: sh };
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = pushing ? '#ff8787' : (over ? '#ff8787' : '#cbd5e1');
+    ctx.font = '800 ' + (14 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText((pushing ? '推 ' : '') + Math.round(spd) + ' km/h', W / 2, sy2 + sh / 2 + 1);
+    ctx.textBaseline = 'alphabetic';
+
+    /* ---- 顾客来电 ---- */
+    if (order.callT > 0) {
+      const bw2 = Math.min(300 * UI, W - 40 * UI);
+      const bh2 = 46 * UI;
+      const bx2 = W / 2 - bw2 / 2;
+      const by2 = narrow ? (cy0 + ch + 52 * UI) : (cy0 + ch + 10 * UI);
+      ctx.fillStyle = 'rgba(30,44,68,0.92)';
+      rr(bx2, by2, bw2, bh2, 12 * UI); ctx.fill();
+      hudBoxes.call = { x: bx2, y: by2, w: bw2, h: bh2 };
+      ctx.strokeStyle = 'rgba(120,180,255,0.55)';
+      ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.fillStyle = '#a5d8ff';
+      ctx.textAlign = 'left';
+      ctx.font = '700 ' + (13.5 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('顾客来电：到哪了？', bx2 + 14 * UI, by2 + 20 * UI);
+      ctx.fillStyle = '#8b98a8';
+      ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('按 E / 点这里 接听', bx2 + 14 * UI, by2 + 36 * UI);
+    }
+
+    /* ---- 操作按钮 ---- */
+    actionBtn = null;
+    rejectBtn = null;
+    let actLabel = null;
+    if (bikeDown > 0) actLabel = '踹车';
+    else if (order.state === 'waiting') actLabel = '催单';
+    else if (order.callT > 0) actLabel = '接听';
+
+    if (actLabel) {
+      const aw = 118 * UI, ah = 42 * UI;
+      const ax = W / 2 - aw / 2;
+      const ay = H - 104 * UI;
+      const ready = bikeDown > 0 ? kickCd <= 0 : (order.state === 'waiting' ? hurryCd <= 0 : true);
+      ctx.fillStyle = ready ? 'rgba(255,140,66,0.92)' : 'rgba(120,130,145,0.55)';
+      rr(ax, ay, aw, ah, 12 * UI); ctx.fill();
+      ctx.fillStyle = '#20140a';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '800 ' + (15 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText(actLabel, W / 2, ay + ah / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+      actionBtn = { x: ax, y: ay, w: aw, h: ah };
+    }
+
+    if (order.junk && order.rejectT > 0 && order.state === 'pickup') {
+      const rw = 96 * UI, rh = 34 * UI;
+      const rx = W / 2 - rw / 2;
+      const ry = H - 158 * UI;
+      ctx.fillStyle = 'rgba(40,20,24,0.9)';
+      rr(rx, ry, rw, rh, 10 * UI); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,107,107,0.6)';
+      ctx.lineWidth = 1.4; ctx.stroke();
+      ctx.fillStyle = '#ff8787';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('拒单 -¥8', W / 2, ry + rh / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+      rejectBtn = { x: rx, y: ry, w: rw, h: rh };
+    }
+
+    /* ---- 提示 ---- */
+    if (hintT > 0) {
+      ctx.globalAlpha = clamp(hintT, 0, 1) * 0.85;
+      ctx.fillStyle = '#cbd5e1';
+      ctx.textAlign = 'left';
+      ctx.font = '600 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText(
+        (TOUCH || narrow) ? '拖拽骑行 · 绿色箭头可走 · E 催单/接电话/踹车' : 'WASD 骑行 · 绿色箭头可走 · E 催单/接电话/踹车',
+        18 * UI, H - 22 * UI
+      );
+      ctx.globalAlpha = 1;
+    }
+
+    drawMinimap();
+    ctx.restore();
+  }
+
+  function drawBanner() {
+    if (bannerT <= 0) return;
+    const a = clamp(bannerT / 0.6, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = a * 0.92;
+    ctx.textAlign = 'center';
+    ctx.font = '700 ' + (16 * UI).toFixed(1) + 'px ' + FONT;
+    const tw = ctx.measureText(bannerText).width;
+    const bw = tw + 44 * UI, bh = 38 * UI;
+    const bx = W / 2 - bw / 2, by = H * 0.2;
+    ctx.fillStyle = 'rgba(14,18,26,0.86)';
+    rr(bx, by, bw, bh, 12 * UI); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,184,107,0.35)';
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = '#ffd8a8';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(bannerText, W / 2, by + bh / 2 + 1);
+    ctx.restore();
+  }
+
+  function drawMinimap() {
+    const mw = Math.min(168 * UI, W * 0.28);
+    const mh = mw * WORLD_H / WORLD_W;
+    const mx = W - mw - 14 * UI, my = H - mh - 14 * UI;
+
+    ctx.fillStyle = 'rgba(10,14,20,0.72)';
+    rr(mx - 7, my - 7, mw + 14, mh + 14, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth = 1; ctx.stroke();
+
+    const s = mw / WORLD_W;
+    hudBoxes.mini = { x: mx - 7, y: my - 7, w: mw + 14, h: mh + 14 };
+    ctx.save();
+    ctx.translate(mx, my);
+    ctx.scale(s, s);
+
+    ctx.fillStyle = '#3a404a';
+    ctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      ctx.fillStyle = b.type === 'park' ? '#4a8a58' : '#1a1f28';
+      ctx.fillRect(b.g.x, b.g.y, b.g.w, b.g.h);
+    }
+
+    ctx.fillStyle = 'rgba(255,255,255,0.18)';
+    for (let i = 0; i < cars.length; i++) {
+      const r = carRect(cars[i]);
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+    }
+
+    if (order) {
+      const t = order.state === 'deliver' ? order.drop : order.pickup;
+      ctx.fillStyle = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+      ctx.beginPath(); ctx.arc(t.x, t.y, 4.5 / s, 0, TAU); ctx.fill();
+    }
+
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(player.x, player.y, 4 / s, 0, TAU); ctx.fill();
+
+    ctx.restore();
+  }
+
+  function drawOffscreenArrow() {
+    if (!order || state !== 'playing') return;
+    const t = order.state === 'deliver' ? order.drop : order.pickup;
+    const col = order.state === 'deliver' ? '#4dabf7' : '#ff9f43';
+    const z = zoom();
+    const sx = (t.x - cam.x) * z + W / 2;
+    const sy = (t.y - cam.y) * z + H / 2;
+    if (sx > 0 && sx < W && sy > 0 && sy < H) return;
+
+    const ang = Math.atan2(sy - H / 2, sx - W / 2);
+    const m = 46 * UI;
+    let topEdge = 0;
+    if (hudBoxes.card) topEdge = Math.max(topEdge, hudBoxes.card.y + hudBoxes.card.h);
+    if (hudBoxes.call) topEdge = Math.max(topEdge, hudBoxes.call.y + hudBoxes.call.h);
+    if (hudBoxes.speed) topEdge = Math.max(topEdge, hudBoxes.speed.y + hudBoxes.speed.h);
+
+    let x0 = m, x1 = W - m;
+    let y0 = Math.min(Math.max(m, topEdge + 14), H * 0.55);
+    let y1 = H - 170 * UI;
+
+    let px = clamp(sx, x0, x1);
+    let py = clamp(sy, y0, y1);
+
+    const pn = hudBoxes.panel;
+    if (pn && py > pn.y - 24 && py < pn.y + pn.h + 70) {
+      px = Math.max(px, pn.x + pn.w + 18);
+    }
+    const mi = hudBoxes.mini;
+    if (mi && px > mi.x - 26) {
+      py = Math.min(py, mi.y - 18);
+    }
+
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(ang);
+    ctx.fillStyle = col;
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    ctx.moveTo(17, 0);
+    ctx.lineTo(-9, -11);
+    ctx.lineTo(-4, 0);
+    ctx.lineTo(-9, 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+
+    const meters = Math.max(1, Math.round(Math.hypot(player.x - t.x, player.y - t.y) / 9));
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '700 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText(meters + 'm', px - Math.cos(ang) * 26, py - Math.sin(ang) * 26 + 4);
+    ctx.restore();
+  }
+
+  function drawStick() {
+    if (!stick) return;
+    const dx0 = stick.x - stick.ox, dy0 = stick.y - stick.oy;
+    const m = Math.hypot(dx0, dy0);
+    const lim = 56;
+    let dx = dx0, dy = dy0;
+    if (m > lim) { dx = dx0 / m * lim; dy = dy0 / m * lim; }
+
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(stick.ox, stick.oy, lim, 0, TAU); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath(); ctx.arc(stick.ox + dx, stick.oy + dy, 24, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  /* =========================================================
+     渲染
+  ========================================================= */
+  function render() {
+    const z = zoom();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    let sx = 0, sy = 0;
+    if (shakeT > 0) {
+      const mag = shakeMag * (shakeT / shakeDur);
+      sx = rand(-mag, mag); sy = rand(-mag, mag);
+    }
+    if (mood < 25) {
+      sx += rand(-0.6, 0.6);
+      sy += rand(-0.6, 0.6);
+    }
+
+    ctx.save();
+    ctx.translate(W / 2 + sx, H / 2 + sy);
+    ctx.scale(z, z);
+    ctx.translate(-cam.x, -cam.y);
+
+    drawGround();
+    drawBlocks();
+    drawLights();
+    drawGuide();
+    drawGoals();
+    drawWaitGauge();
+    drawCars();
+    drawPlayer();
+    drawEffects();
+
+    ctx.restore();
+
+    drawVignette();
+    drawWeather();
+    drawNight();
+    if (state === 'playing' || state === 'paused' || state === 'over') drawHUD();
+    drawOffscreenArrow();
+    drawBanner();
+    drawStick();
+  }
+
+  /* =========================================================
+     流程
+  ========================================================= */
+  const elMenu = document.getElementById('screenMenu');
+  const elOver = document.getElementById('screenOver');
+  const elPause = document.getElementById('screenPause');
+  const elMoney = document.getElementById('oMoney');
+  const elOrders = document.getElementById('oOrders');
+  const elFines = document.getElementById('oFines');
+  const elViolations = document.getElementById('oViolations');
+  const elRank = document.getElementById('oRank');
+  const elEpilogue = document.getElementById('oEpilogue');
+  const btnMute = document.getElementById('btnMute');
+
+  function hideAll() {
+    elMenu.classList.remove('show');
+    elOver.classList.remove('show');
+    elPause.classList.remove('show');
+  }
+
+  function startGame() {
+    hideAll();
+    ac();
+    money = 0; ordersDone = 0; lives = 3; combo = 0; bestCombo = 0;
+    fines = 0; violations = 0; falls = 0; complaints = 0; rejects = 0;
+    particles.length = 0; texts.length = 0; rings.length = 0;
+    stick = null; hurryCd = 0; flashT = 0; bannerT = 0; kickCd = 0;
+    keys.clear();
+
+    battery = 100; pushing = false;
+    mood = 100; breakdownT = 0;
+    bikeDown = 0; heatT = 0; gustT = 0; gustPower = 0;
+    night = 0; elapsed = 0; lastLCol = '';
+
+    player.x = START.x;
+    player.y = START.y;
+    player.vx = 0; player.vy = 0;
+    player.angle = 0;
+    player.invuln = 1.5;
+    player.stun = 0; player.slipT = 0; player.fallT = 0;
+    player.lightI = -1; player.lightJ = -1;
+
+    cam.x = player.x; cam.y = player.y;
+    cam.tx = cam.x; cam.ty = cam.y;
+
+    const r = Math.random();
+    setWeather(r < 0.42 ? 'clear' : r < 0.58 ? 'heat' : r < 0.76 ? 'rain' : r < 0.9 ? 'snow' : 'wind', true);
+
+    spawnCars(9);
+    order = null;
+    newOrder();
+
+    state = 'playing';
+    hintT = 9;
+    shakeT = 0;
+    sfx('start');
+  }
+
+  function pauseGame() {
+    if (state !== 'playing') return;
+    state = 'paused';
+    elPause.classList.add('show');
+  }
+
+  function resumeGame() {
+    if (state !== 'paused') return;
+    elPause.classList.remove('show');
+    state = 'playing';
+  }
+
+  function buildEpilogue() {
+    if (falls > 0) {
+      return '雨里摔了一跤，餐没洒。<b>你扶起车，先看了一眼餐箱，才看自己的手。</b>';
+    }
+    if (battery <= 0 || pushing) {
+      return '最后几公里是推回来的。<b>电瓶没电的时候，系统还在催你快点。</b>';
+    }
+    if (fines > 0 && violations > 3) {
+      return '系统算的是送达时间，不算你等红灯的那 90 秒。<b>今天你闯了 ' + violations + ' 次红灯。</b>';
+    }
+    if (rejects > 0) {
+      return '你拒了几单，罚了 ¥' + (rejects * 8) + '。<b>不接，要罚；接了，要命。</b>';
+    }
+    if (complaints > 0) {
+      return '有几单顾客打了电话、发了火。<b>你不是不想快，是路上真的快不了。</b>';
+    }
+    if (lives <= 0) {
+      return '三单超时。你今晚大概不太想看手机。<b>明天还得出车。</b>';
+    }
+    return '今天没出事，只是运气好。<b>路上那么多骑手，靠的多半也是这个。</b>';
+  }
+
+  function gameOver() {
+    state = 'over';
+    stick = null;
+    sfx('over');
+
+    const rank = money >= 320 ? '金牌骑手' : money >= 180 ? '熟练骑手' : money >= 80 ? '新手骑手' : '路痴骑手';
+    elRank.textContent = rank;
+    elMoney.textContent = '¥' + money;
+    elOrders.textContent = String(ordersDone);
+    elFines.textContent = '¥' + fines;
+    elViolations.textContent = String(violations);
+    elEpilogue.innerHTML = buildEpilogue();
+    elOver.classList.add('show');
+  }
+
+  function toggleMute() {
+    muted = !muted;
+    btnMute.textContent = muted ? '🔇' : '🔊';
+  }
+
+  btnMute.addEventListener('click', function (e) { e.stopPropagation(); toggleMute(); });
+  document.getElementById('btnStart').addEventListener('click', startGame);
+  document.getElementById('btnAgain').addEventListener('click', startGame);
+  document.getElementById('btnResume').addEventListener('click', resumeGame);
+  elPause.addEventListener('click', function (e) { if (e.target === elPause) resumeGame(); });
+
+  /* =========================================================
+     启动
+  ========================================================= */
+  let last = 0;
+  function frame(now) {
+    if (!last) last = now;
+    let dt = (now - last) / 1000;
+    last = now;
+    if (dt > 0.05) dt = 0.05;
+    if (dt < 0) dt = 0;
+
+    if (state !== 'paused') update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  buildCity();
+  player.x = START.x;
+  player.y = START.y;
+  cam.x = player.x;
+  cam.y = player.y;
+  spawnCars(10);
+
+  requestAnimationFrame(frame);
+})();
+</script>
+
+<script>
+  // PWA：仅在安全上下文（https / localhost）注册离线缓存
+  (function () {
+    if (!('serviceWorker' in navigator)) return;
+    var secure = location.protocol === 'https:' ||
+      location.hostname === 'localhost' ||
+      location.hostname === '127.0.0.1';
+    if (!secure) return;
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('./sw.js').catch(function () {});
+    });
+  })();
+</script>
+</body>
+</html>
