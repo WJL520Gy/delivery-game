@@ -314,6 +314,7 @@
   let fines = 0, violations = 0, falls = 0, complaints = 0, rejects = 0;
   let order = null;
   let cars = [];
+  let peds = [];
   let particles = [], texts = [], rings = [];
   let clock = 0, elapsed = 0, hintT = 0, bannerT = 0, bannerText = '';
   let shakeT = 0, shakeDur = 1, shakeMag = 0;
@@ -421,6 +422,25 @@
     }
   }
 
+  // 路边道具：路灯 + 行道树（会轻微摇摆）
+  function addProps() {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      const g = b.g;
+      const props = [
+        { type: 'lamp', x: g.x - 5, y: g.y - 5 },
+        { type: 'lamp', x: g.x + g.w + 5, y: g.y + g.h + 5 }
+      ];
+      if (Math.random() < 0.65) {
+        props.push({ type: 'tree', x: g.x + g.w + 5, y: g.y - 5, r: rand(8, 12), ph: rand(0, TAU) });
+      }
+      if (Math.random() < 0.55) {
+        props.push({ type: 'tree', x: g.x - 5, y: g.y + g.h + 5, r: rand(8, 12), ph: rand(0, TAU) });
+      }
+      b.props = props;
+    }
+  }
+
   function makeDoor(b) {
     const g = b.g;
     const off = 36;
@@ -520,6 +540,85 @@
     return c.axis === 'h'
       ? { x: c.t - 29, y: c.fixed - 15, w: 58, h: 30 }
       : { x: c.fixed - 15, y: c.t - 29, w: 30, h: 58 };
+  }
+
+  /* ---------- 过马路的行人 ---------- */
+  function makePed() {
+    const vertical = Math.random() < 0.5;
+    const idx = randInt(1, 3);
+    const along = rand(140, vertical ? WORLD_H - 140 : WORLD_W - 140);
+    let x0, y0, x1, y1;
+    if (vertical) {
+      const cx = XS[idx];
+      x0 = cx - 46; x1 = cx + 46; y0 = y1 = along;
+    } else {
+      const cy = YS[idx];
+      y0 = cy - 46; y1 = cy + 46; x0 = x1 = along;
+    }
+    return {
+      x0, y0, x1, y1,
+      t: Math.random(),
+      dir: Math.random() < 0.5 ? 1 : -1,
+      speed: rand(26, 42),
+      color: pick(['#e57373', '#64b5f6', '#81c784', '#ffb74d', '#ba68c8', '#4db6ac', '#f06292']),
+      ph: rand(0, TAU),
+      wait: 0
+    };
+  }
+
+  function spawnPeds(n) {
+    peds = [];
+    for (let i = 0; i < n; i++) peds.push(makePed());
+  }
+
+  function updatePeds(dt) {
+    for (let i = 0; i < peds.length; i++) {
+      const p = peds[i];
+      if (p.wait > 0) { p.wait -= dt; continue; }
+      const len = Math.hypot(p.x1 - p.x0, p.y1 - p.y0) || 1;
+      p.t += p.dir * (p.speed / len) * dt;
+      if (p.t >= 1) { p.t = 1; p.dir = -1; p.wait = rand(0.4, 2.2); }
+      if (p.t <= 0) { p.t = 0; p.dir = 1; p.wait = rand(0.4, 2.2); }
+    }
+
+    if (player.invuln > 0) return;
+    for (let i = 0; i < peds.length; i++) {
+      const p = peds[i];
+      const wx = p.x0 + (p.x1 - p.x0) * p.t;
+      const wy = p.y0 + (p.y1 - p.y0) * p.t;
+      if (Math.hypot(wx - player.x, wy - player.y) < 26) {
+        player.invuln = 1.6;
+        player.stun = 0.35;
+        player.vx *= 0.2;
+        player.vy *= 0.2;
+        if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 1.5);
+        mood = clamp(mood - 4, 0, 100);
+        shake(8);
+        sfx('yelp');
+        addText(player.x, player.y - 40, '对不起！', '#ffd166', 1.0);
+        return;
+      }
+    }
+  }
+
+  function drawPeds() {
+    for (let i = 0; i < peds.length; i++) {
+      const p = peds[i];
+      const wx = p.x0 + (p.x1 - p.x0) * p.t;
+      const wy = p.y0 + (p.y1 - p.y0) * p.t;
+      const bob = Math.sin(clock * 9 + p.ph) * 1.4;
+      ctx.save();
+      ctx.translate(wx, wy);
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.ellipse(0, 5, 9, 4.5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = p.color;
+      rr(-5, -5 + bob, 10, 13, 5); ctx.fill();
+      ctx.fillStyle = '#f2d3a8';
+      ctx.beginPath(); ctx.arc(0, -9 + bob, 5, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#3b2f2a';
+      ctx.beginPath(); ctx.arc(0, -10 + bob, 5, Math.PI, TAU); ctx.fill();
+      ctx.restore();
+    }
   }
 
   /* =========================================================
@@ -795,7 +894,7 @@
     o.frequency.setValueAtTime(freq, t0);
     if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t0 + dur);
     g.gain.setValueAtTime(0.0001, t0);
-    g.gain.exponentialRampToValueAtTime(vol || 0.07, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(Math.min(0.5, (vol || 0.07) * 2.4), t0 + 0.012);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
     o.connect(g); g.connect(a.destination);
     o.start(t0); o.stop(t0 + dur + 0.05);
@@ -825,6 +924,10 @@
       case 'fine': tone(660, 0.08, 'square', 0.05); tone(440, 0.14, 'square', 0.05, 0, 0.08); break;
       case 'dead': tone(220, 0.3, 'sawtooth', 0.06, 0.5); break;
       case 'wind': tone(300, 0.4, 'sawtooth', 0.03, 0.7); break;
+      case 'yelp':
+        tone(880, 0.07, 'square', 0.07);
+        tone(620, 0.11, 'square', 0.05, 0.7, 0.07);
+        break;
     }
   }
 
@@ -887,7 +990,7 @@
   }
 
   // 固定摇杆：只有按住左下角这一片才会移动，避免"拖哪都跑"
-  function joyCenter() { return { x: 96 * UI, y: H - 96 * UI, r: 130 * UI }; }
+  function joyCenter() { return { x: 100 * UI, y: H - 108 * UI, r: 155 * UI }; }
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state !== 'playing') return;
@@ -982,7 +1085,7 @@
     }
     if (heatT > 0) { ix *= 0.7; iy *= 0.7; }
 
-    let maxV = MAXV * wx.speed;
+    let maxV = MAXV * wx.speed * (W < 660 ? 0.88 : 1);
     if (pushing) maxV = Math.min(maxV, PUSH_V);
     if (mood < 25) maxV *= 0.93;
 
@@ -1354,6 +1457,7 @@
       updateHeat(dt);
       updatePlayer(dt);
       updateCars(dt);
+      updatePeds(dt);
       checkCarHits();
       checkLights();
       updateOrder(dt);
@@ -1414,6 +1518,36 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 6;
     ctx.strokeRect(-3, -3, WORLD_W + 6, WORLD_H + 6);
+  }
+
+  function drawProps() {
+    for (let i = 0; i < buildings.length; i++) {
+      const b = buildings[i];
+      if (!b.props) continue;
+      for (let k = 0; k < b.props.length; k++) {
+        const pr = b.props[k];
+        if (pr.type === 'lamp') {
+          ctx.fillStyle = 'rgba(0,0,0,0.22)';
+          ctx.beginPath(); ctx.ellipse(pr.x + 3, pr.y + 4, 6, 3, 0, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#59616f';
+          ctx.beginPath(); ctx.arc(pr.x, pr.y, 4.4, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#828d9e';
+          ctx.beginPath(); ctx.arc(pr.x, pr.y, 2.2, 0, TAU); ctx.fill();
+          if (night > 0.05) {
+            ctx.fillStyle = 'rgba(255,214,130,' + (0.5 * night).toFixed(3) + ')';
+            ctx.beginPath(); ctx.arc(pr.x, pr.y, 10 + 16 * night, 0, TAU); ctx.fill();
+          }
+        } else {
+          const sway = Math.sin(clock * 1.4 + pr.ph) * 1.8;
+          ctx.fillStyle = 'rgba(0,0,0,0.20)';
+          ctx.beginPath(); ctx.arc(pr.x + 3, pr.y + 4, pr.r, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#2f6b3d';
+          ctx.beginPath(); ctx.arc(pr.x + sway, pr.y, pr.r, 0, TAU); ctx.fill();
+          ctx.fillStyle = '#43a05a';
+          ctx.beginPath(); ctx.arc(pr.x + sway - pr.r * 0.3, pr.y - pr.r * 0.3, pr.r * 0.55, 0, TAU); ctx.fill();
+        }
+      }
+    }
   }
 
   function drawBlocks() {
@@ -1489,7 +1623,7 @@
     }
   }
 
-  // 单个方向的路口引导：停止线 + 路面箭头 + 读秒
+  // 单个进口：停止线 + 实体红绿灯（灯杆、灯箱、读秒）
   function drawApproach(bx, by, ang, col, num, big) {
     const lit = col === COLOR_HEX.g ? 2 : col === COLOR_HEX.y ? 1 : 0;
     const px = Math.cos(ang + Math.PI / 2);
@@ -1500,76 +1634,74 @@
     ctx.save();
     ctx.translate(bx, by);
     ctx.rotate(ang);
-    ctx.fillStyle = hexA(col, 0.85);
-    rr(-2.5, -21, 5, 42, 2);
-    ctx.fill();
-
-    // 路面箭头：只作为车道方向的淡提醒
-    ctx.globalAlpha *= 0.18;
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(-10, 0);
-    ctx.lineTo(-20, -7);
-    ctx.lineTo(-20, -3);
-    ctx.lineTo(-46, -3);
-    ctx.lineTo(-46, 3);
-    ctx.lineTo(-20, 3);
-    ctx.lineTo(-20, 7);
-    ctx.closePath();
+    ctx.fillStyle = hexA(col, 0.9);
+    rr(-3, -22, 6, 44, 2);
     ctx.fill();
     ctx.restore();
 
-    // 灯杆底座 + 横臂
+    // 支架：从灯箱伸向路缘，末端一个小底座
     ctx.save();
-    ctx.translate(bx, by);
-    ctx.rotate(ang);
-    ctx.fillStyle = '#3a4150';
-    ctx.beginPath(); ctx.arc(0, 50, 4.5, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#4b5466';
-    rr(-2, 34, 4, 16, 2); ctx.fill();
+    ctx.strokeStyle = '#3c4351';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(hx + px * 20, hy + py * 20);
+    ctx.lineTo(hx + px * 30, hy + py * 30);
+    ctx.stroke();
+    ctx.fillStyle = '#2b323d';
+    ctx.beginPath();
+    ctx.arc(hx + px * 31, hy + py * 31, 4.5, 0, TAU);
+    ctx.fill();
     ctx.restore();
 
-    // 灯箱：红黄绿三灯，只有当前色亮
+    // 高亮：玩家正对这个灯时脉冲
     if (big) {
       const pulse = (Math.sin(clock * 6) + 1) / 2;
-      ctx.strokeStyle = hexA(col, 0.3 + pulse * 0.5);
+      ctx.strokeStyle = hexA(col, 0.28 + pulse * 0.5);
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(hx, hy, 26 + pulse * 8, 0, TAU);
+      ctx.arc(hx, hy, 30 + pulse * 10, 0, TAU);
       ctx.stroke();
     }
 
+    // 灯箱：红黄绿三灯
     ctx.save();
     ctx.translate(hx, hy);
-    ctx.fillStyle = 'rgba(10,14,20,0.92)';
-    rr(-8, -17, 16, 36, 5);
+    ctx.fillStyle = 'rgba(12,16,24,0.95)';
+    rr(-9, -22, 18, 44, 6);
     ctx.fill();
-    ctx.strokeStyle = big ? hexA(col, 0.95) : 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = big ? 2 : 1.2;
-    rr(-8, -17, 16, 36, 5);
+    ctx.strokeStyle = big ? hexA(col, 0.95) : 'rgba(255,255,255,0.28)';
+    ctx.lineWidth = big ? 2.2 : 1.3;
+    rr(-9, -22, 18, 44, 6);
     ctx.stroke();
 
     const cols = [COLOR_HEX.r, COLOR_HEX.y, COLOR_HEX.g];
     for (let k = 0; k < 3; k++) {
-      const ly = -10 + k * 10;
+      const ly = -13 + k * 13;
       const on = (k === lit);
       if (on) {
         ctx.beginPath();
-        ctx.arc(0, ly, 8.5, 0, TAU);
-        ctx.fillStyle = hexA(cols[k], 0.28);
+        ctx.arc(0, ly, 10.5, 0, TAU);
+        ctx.fillStyle = hexA(cols[k], 0.30);
         ctx.fill();
       }
       ctx.beginPath();
-      ctx.arc(0, ly, 4.3, 0, TAU);
-      ctx.fillStyle = on ? cols[k] : 'rgba(255,255,255,0.10)';
+      ctx.arc(0, ly, 5.2, 0, TAU);
+      ctx.fillStyle = on ? cols[k] : 'rgba(255,255,255,0.09)';
       ctx.fill();
+      if (on) {
+        ctx.beginPath();
+        ctx.arc(-1.6, ly - 1.6, 1.7, 0, TAU);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fill();
+      }
     }
     ctx.restore();
 
     // 读秒牌（挂在灯箱上方）
     if (num != null) {
       const k = big ? 1.3 : 1;
-      const nx = hx, ny = hy - 30 * UI;
+      const nx = hx, ny = hy - 36 * UI;
       ctx.font = '800 ' + (12 * UI * k).toFixed(1) + 'px ' + FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -2473,7 +2605,7 @@
   function drawStick() {
     if (state !== 'playing') return;
     const j = joyCenter();
-    const bx = j.x, by = j.y, r = 66 * UI;
+    const bx = j.x, by = j.y, r = 78 * UI;
 
     if (TOUCH || stick) {
       ctx.save();
@@ -2492,7 +2624,7 @@
       if (TOUCH) {
         ctx.save();
         ctx.fillStyle = 'rgba(255,255,255,0.20)';
-        ctx.beginPath(); ctx.arc(bx, by, 26 * UI, 0, TAU); ctx.fill();
+        ctx.beginPath(); ctx.arc(bx, by, 31 * UI, 0, TAU); ctx.fill();
         ctx.restore();
       }
       return;
@@ -2505,7 +2637,7 @@
 
     ctx.save();
     ctx.fillStyle = 'rgba(255,176,102,0.80)';
-    ctx.beginPath(); ctx.arc(bx + dx, by + dy, 28 * UI, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(bx + dx, by + dy, 33 * UI, 0, TAU); ctx.fill();
     ctx.restore();
   }
 
@@ -2534,11 +2666,13 @@
 
     drawGround();
     drawBlocks();
+    drawProps();
     drawLights();
     drawGuide();
     drawGoals();
     drawWaitGauge();
     drawCars();
+    drawPeds();
     drawDog();
     drawPlayer();
     drawEffects();
@@ -2604,6 +2738,7 @@
     setWeather(r < 0.42 ? 'clear' : r < 0.58 ? 'heat' : r < 0.76 ? 'rain' : r < 0.9 ? 'snow' : 'wind', true);
 
     spawnCars(9);
+    spawnPeds(12);
     order = null;
     newOrder();
 
@@ -2691,11 +2826,13 @@
 
   resize();
   buildCity();
+  addProps();
   player.x = START.x;
   player.y = START.y;
   cam.x = player.x;
   cam.y = player.y;
   spawnCars(10);
+  spawnPeds(10);
 
   requestAnimationFrame(frame);
 })();
