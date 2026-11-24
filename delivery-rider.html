@@ -321,6 +321,7 @@
   let hurryCd = 0;
   let actionBtn = null, rejectBtn = null;
   let flashT = 0;
+  let ev = { next: 14, dog: null };
 
   let battery = 100, pushing = false;
   let mood = 100, breakdownT = 0;
@@ -885,13 +886,19 @@
     return b && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
   }
 
+  // 固定摇杆：只有按住左下角这一片才会移动，避免"拖哪都跑"
+  function joyCenter() { return { x: 96 * UI, y: H - 96 * UI, r: 130 * UI }; }
+
   canvas.addEventListener('pointerdown', (e) => {
     if (state !== 'playing') return;
     if (hitBox(actionBtn, e.clientX, e.clientY)) { doAction(); e.preventDefault(); return; }
     if (hitBox(rejectBtn, e.clientX, e.clientY)) { rejectOrder(); e.preventDefault(); return; }
 
-    stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
-    try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    const j = joyCenter();
+    if (Math.hypot(e.clientX - j.x, e.clientY - j.y) <= j.r) {
+      stick = { id: e.pointerId, ox: j.x, oy: j.y, x: e.clientX, y: e.clientY };
+      try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
+    }
     e.preventDefault();
   });
   canvas.addEventListener('pointermove', (e) => {
@@ -1180,6 +1187,62 @@
     if (mood < 100) mood = Math.min(100, mood + 0.9 * dt);
   }
 
+  // 随机小事件：打赏 / 商家送吃的 / 被狗追
+  function updateEvents(dt) {
+    if (state !== 'playing') return;
+
+    if (ev.dog) {
+      const d = ev.dog;
+      d.t -= dt;
+      const dx = player.x - d.x, dy = player.y - d.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const sp = 205;
+      d.x += dx / dist * sp * dt;
+      d.y += dy / dist * sp * dt;
+      d.ang = Math.atan2(dy, dx);
+      if (dist < 36) {
+        player.stun = Math.max(player.stun, 0.22);
+        mood = clamp(mood - 3, 0, 100);
+        addText(player.x, player.y - 38, '汪汪！', '#ff8787', 1.0);
+        d.t = 0;
+      }
+      if (d.t <= 0) {
+        ev.dog = null;
+        addText(player.x, player.y - 62, '狗放弃了…', '#cbd5e1', 0.9);
+      }
+    }
+
+    if (!order || order.state !== 'deliver') return;
+    ev.next -= dt;
+    if (ev.next > 0) return;
+    ev.next = rand(20, 38);
+
+    const r = Math.random();
+    if (r < 0.38) {
+      const tip = randInt(5, 15);
+      money += tip;
+      mood = clamp(mood + 6, 0, 100);
+      addText(player.x, player.y - 50, '顾客打赏 +¥' + tip, '#ffd166', 1.15);
+      burst(player.x, player.y, 12, '#ffd166', 0.8);
+      sfx('deliver');
+    } else if (r < 0.68) {
+      mood = clamp(mood + 14, 0, 100);
+      if (order) order.timeLeft = Math.min(order.timeLimit, order.timeLeft + 3);
+      addText(player.x, player.y - 50, '商家塞了个肉夹馍', '#ffb86b', 1.05);
+      addText(player.x, player.y - 76, '心情 +14 · 时间 +3s', '#8ce99a', 0.85, 0.5);
+      sfx('bell');
+    } else {
+      ev.dog = {
+        x: player.x - Math.cos(player.angle) * 230,
+        y: player.y - Math.sin(player.angle) * 230,
+        t: 9,
+        ang: player.angle
+      };
+      addText(player.x, player.y - 54, '有狗追你！！', '#ff8787', 1.15);
+      sfx('hang');
+    }
+  }
+
   function updateWind(dt) {
     if (wx.wind <= 0) { gustT = 0; gustPower = 0; return; }
     if (gustT > 0) {
@@ -1296,6 +1359,7 @@
       updateOrder(dt);
       updateBike(dt);
       updateMood(dt);
+      updateEvents(dt);
       // 等灯时，绿灯亮起给一声轻提示
       const ca = axisInfo(playerAxis()).c;
       if (ca === 'g' && lastLCol && lastLCol !== 'g' && Math.hypot(player.vx, player.vy) < 70) sfx('bell');
@@ -1427,54 +1491,92 @@
 
   // 单个方向的路口引导：停止线 + 路面箭头 + 读秒
   function drawApproach(bx, by, ang, col, num, big) {
-    // 高亮：玩家正对的那个进口加一圈脉冲，避免"看错灯"
-    if (big) {
-      const pulse = (Math.sin(clock * 6) + 1) / 2;
-      ctx.save();
-      ctx.strokeStyle = hexA(col, 0.35 + pulse * 0.45);
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(bx, by, 26 + pulse * 10, 0, TAU);
-      ctx.stroke();
-      ctx.restore();
-    }
+    const lit = col === COLOR_HEX.g ? 2 : col === COLOR_HEX.y ? 1 : 0;
+    const px = Math.cos(ang + Math.PI / 2);
+    const py = Math.sin(ang + Math.PI / 2);
+    const hx = bx + px * 34, hy = by + py * 34;   // 灯箱中心
 
+    // 停止线
     ctx.save();
     ctx.translate(bx, by);
     ctx.rotate(ang);
-
-    // 停止线
-    ctx.fillStyle = hexA(col, 0.9);
+    ctx.fillStyle = hexA(col, 0.85);
     rr(-2.5, -21, 5, 42, 2);
     ctx.fill();
 
-    // 箭头（指向可行驶方向，拉长到一眼能看出车道走向）
-    ctx.fillStyle = hexA(col, 0.85);
+    // 路面箭头：只作为车道方向的淡提醒
+    ctx.globalAlpha *= 0.18;
+    ctx.fillStyle = '#ffffff';
     ctx.beginPath();
-    ctx.moveTo(-12, 0);
-    ctx.lineTo(-30, -10.5);
-    ctx.lineTo(-30, -4.2);
-    ctx.lineTo(-84, -4.2);
-    ctx.lineTo(-84, 4.2);
-    ctx.lineTo(-30, 4.2);
-    ctx.lineTo(-30, 10.5);
+    ctx.moveTo(-10, 0);
+    ctx.lineTo(-20, -7);
+    ctx.lineTo(-20, -3);
+    ctx.lineTo(-46, -3);
+    ctx.lineTo(-46, 3);
+    ctx.lineTo(-20, 3);
+    ctx.lineTo(-20, 7);
     ctx.closePath();
     ctx.fill();
-
     ctx.restore();
 
-    // 读秒牌（不随箭头旋转，方便读）
+    // 灯杆底座 + 横臂
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.rotate(ang);
+    ctx.fillStyle = '#3a4150';
+    ctx.beginPath(); ctx.arc(0, 50, 4.5, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#4b5466';
+    rr(-2, 34, 4, 16, 2); ctx.fill();
+    ctx.restore();
+
+    // 灯箱：红黄绿三灯，只有当前色亮
+    if (big) {
+      const pulse = (Math.sin(clock * 6) + 1) / 2;
+      ctx.strokeStyle = hexA(col, 0.3 + pulse * 0.5);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(hx, hy, 26 + pulse * 8, 0, TAU);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.fillStyle = 'rgba(10,14,20,0.92)';
+    rr(-8, -17, 16, 36, 5);
+    ctx.fill();
+    ctx.strokeStyle = big ? hexA(col, 0.95) : 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = big ? 2 : 1.2;
+    rr(-8, -17, 16, 36, 5);
+    ctx.stroke();
+
+    const cols = [COLOR_HEX.r, COLOR_HEX.y, COLOR_HEX.g];
+    for (let k = 0; k < 3; k++) {
+      const ly = -10 + k * 10;
+      const on = (k === lit);
+      if (on) {
+        ctx.beginPath();
+        ctx.arc(0, ly, 8.5, 0, TAU);
+        ctx.fillStyle = hexA(cols[k], 0.28);
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.arc(0, ly, 4.3, 0, TAU);
+      ctx.fillStyle = on ? cols[k] : 'rgba(255,255,255,0.10)';
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // 读秒牌（挂在灯箱上方）
     if (num != null) {
-      const k = big ? 1.45 : 1;
-      const px = bx + Math.cos(ang + Math.PI / 2) * (30 * k);
-      const py = by + Math.sin(ang + Math.PI / 2) * (30 * k);
-      ctx.font = '800 ' + (12.5 * UI * k).toFixed(1) + 'px ' + FONT;
+      const k = big ? 1.3 : 1;
+      const nx = hx, ny = hy - 30 * UI;
+      ctx.font = '800 ' + (12 * UI * k).toFixed(1) + 'px ' + FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       const tw = ctx.measureText(num).width;
-      const w = tw + 12 * UI * k, h = 19 * UI * k;
+      const w = tw + 12 * UI * k, h = 18 * UI * k;
       ctx.fillStyle = 'rgba(10,14,20,0.88)';
-      rr(px - w / 2, py - h / 2, w, h, h / 2);
+      rr(nx - w / 2, ny - h / 2, w, h, h / 2);
       ctx.fill();
       if (big) {
         ctx.strokeStyle = hexA(col, 0.75);
@@ -1482,7 +1584,7 @@
         ctx.stroke();
       }
       ctx.fillStyle = col;
-      ctx.fillText(num, px, py + 1);
+      ctx.fillText(num, nx, ny + 1);
       ctx.textBaseline = 'alphabetic';
     }
   }
@@ -1688,6 +1790,50 @@
 
       ctx.restore();
     }
+  }
+
+  function drawDog() {
+    if (!ev.dog) return;
+    const d = ev.dog;
+    ctx.save();
+    ctx.translate(d.x, d.y);
+
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(0, 6, 17, 8, 0, 0, TAU);
+    ctx.fill();
+
+    ctx.rotate(d.ang);
+    const wag = Math.sin(clock * 18) * 7;
+
+    // 尾巴
+    ctx.strokeStyle = '#7a4d31';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-15, 0);
+    ctx.lineTo(-26, wag);
+    ctx.stroke();
+
+    // 身体
+    ctx.fillStyle = '#8a5a3b';
+    rr(-16, -8, 30, 16, 8);
+    ctx.fill();
+
+    // 头
+    ctx.fillStyle = '#a06a45';
+    ctx.beginPath(); ctx.arc(16, 0, 9, 0, TAU); ctx.fill();
+
+    // 耳朵
+    ctx.fillStyle = '#6f4526';
+    ctx.beginPath(); ctx.arc(13, -7, 4.2, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(13, 7, 4.2, 0, TAU); ctx.fill();
+
+    // 鼻子
+    ctx.fillStyle = '#2b1a10';
+    ctx.beginPath(); ctx.arc(23, 0, 2.6, 0, TAU); ctx.fill();
+
+    ctx.restore();
   }
 
   function drawPlayer() {
@@ -2272,33 +2418,40 @@
 
   function drawStick() {
     if (state !== 'playing') return;
+    const j = joyCenter();
+    const bx = j.x, by = j.y, r = 66 * UI;
 
-    // 触屏设备：没在操作时显示一个固定底座，让玩家知道往哪拖
-    if (TOUCH && !stick) {
-      const bx = 92 * UI, by = H - 92 * UI, r = 62 * UI;
+    if (TOUCH || stick) {
       ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      ctx.strokeStyle = stick ? 'rgba(255,255,255,0.40)' : 'rgba(255,255,255,0.17)';
       ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.20)';
-      ctx.beginPath(); ctx.arc(bx, by, 22 * UI, 0, TAU); ctx.fill();
+      ctx.globalAlpha = stick ? 0.35 : 0.14;
+      ctx.beginPath();
+      ctx.moveTo(bx - r - 8, by); ctx.lineTo(bx + r + 8, by);
+      ctx.moveTo(bx, by - r - 8); ctx.lineTo(bx, by + r + 8);
+      ctx.stroke();
       ctx.restore();
+    }
+
+    if (!stick) {
+      if (TOUCH) {
+        ctx.save();
+        ctx.fillStyle = 'rgba(255,255,255,0.20)';
+        ctx.beginPath(); ctx.arc(bx, by, 26 * UI, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
       return;
     }
-    if (!stick) return;
-    const dx0 = stick.x - stick.ox, dy0 = stick.y - stick.oy;
+
+    const dx0 = stick.x - bx, dy0 = stick.y - by;
     const m = Math.hypot(dx0, dy0);
-    const lim = 62;
     let dx = dx0, dy = dy0;
-    if (m > lim) { dx = dx0 / m * lim; dy = dy0 / m * lim; }
+    if (m > r) { dx = dx0 / m * r; dy = dy0 / m * r; }
 
     ctx.save();
-    ctx.globalAlpha = 0.5;
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(stick.ox, stick.oy, lim, 0, TAU); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.beginPath(); ctx.arc(stick.ox + dx, stick.oy + dy, 26, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,176,102,0.80)';
+    ctx.beginPath(); ctx.arc(bx + dx, by + dy, 28 * UI, 0, TAU); ctx.fill();
     ctx.restore();
   }
 
@@ -2332,6 +2485,7 @@
     drawGoals();
     drawWaitGauge();
     drawCars();
+    drawDog();
     drawPlayer();
     drawEffects();
 
@@ -2379,6 +2533,7 @@
     mood = 100; breakdownT = 0;
     bikeDown = 0; heatT = 0; gustT = 0; gustPower = 0;
     night = 0; elapsed = 0; lastLCol = '';
+    ev = { next: 14, dog: null };
 
     player.x = START.x;
     player.y = START.y;
