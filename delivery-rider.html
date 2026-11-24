@@ -548,8 +548,8 @@
       Math.hypot(player.x - from.door.x, player.y - from.door.y) +
       Math.hypot(from.door.x - to.door.x, from.door.y - to.door.y);
 
-    const diff = clamp(1 - 0.011 * ordersDone, 0.72, 1);
-    const timeLimit = clamp(route / 205 + 24, 30, 80) * diff;
+    const diff = clamp(1 - 0.011 * ordersDone, 0.78, 1);
+    const timeLimit = clamp(route / 190 + 28, 35, 90) * diff;
     const centerDist = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
     let base = 6 + Math.round(centerDist / 110);
     if (junk) base = Math.max(3, Math.round(base * 0.55));
@@ -1836,59 +1836,100 @@
     ctx.restore();
   }
 
+  function heartShape(cx, cy, s) {
+    ctx.beginPath();
+    ctx.moveTo(cx, cy + s);
+    ctx.bezierCurveTo(cx - s * 1.4, cy - s * 0.2, cx - s * 0.9, cy - s * 1.25, cx, cy - s * 0.45);
+    ctx.bezierCurveTo(cx + s * 0.9, cy - s * 1.25, cx + s * 1.4, cy - s * 0.2, cx, cy + s);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   function drawPlayer() {
     const p = player;
+    const sp = Math.hypot(p.vx, p.vy);
+    const bob = sp > 30 ? Math.sin(clock * 20) * 1.1 : Math.sin(clock * 2.4) * 0.7;
+
     ctx.save();
     ctx.translate(p.x, p.y);
 
-    ctx.fillStyle = 'rgba(0,0,0,0.30)';
+    // 影子
+    ctx.fillStyle = 'rgba(0,0,0,0.26)';
     ctx.beginPath();
-    ctx.ellipse(2, 4, 18, 12, 0, 0, TAU);
+    ctx.ellipse(2, 6, 20, 11, 0, 0, TAU);
     ctx.fill();
 
     if (p.invuln > 0 && Math.floor(clock * 22) % 2 === 0) ctx.globalAlpha = 0.45;
 
     const fallen = p.fallT > 0;
-
     if (fallen) {
       ctx.rotate(p.angle + 1.35);
       ctx.globalAlpha *= 0.9;
     } else {
-      ctx.translate(0, -3);
+      ctx.translate(0, -4 + bob);
       ctx.rotate(p.angle);
     }
 
-    ctx.fillStyle = '#141a24';
-    rr(-17, -4.5, 9, 9, 4); ctx.fill();
-    rr(8, -4.5, 9, 9, 4); ctx.fill();
+    // 轮子：圆滚滚 + 浅色轮毂
+    ctx.fillStyle = '#1d232d';
+    rr(-19, -5.5, 11, 11, 5.5); ctx.fill();
+    rr(9, -5.5, 11, 11, 5.5); ctx.fill();
+    ctx.fillStyle = '#9aa6b8';
+    rr(-17, -2.6, 7, 5.2, 2.6); ctx.fill();
+    rr(11, -2.6, 7, 5.2, 2.6); ctx.fill();
 
-    ctx.fillStyle = '#b8461a';
-    rr(-16.5, -9, 33, 18, 9); ctx.fill();
-    ctx.fillStyle = '#ff7a2f';
-    rr(-15.5, -8, 31, 16, 8); ctx.fill();
+    // 车身
+    ctx.fillStyle = '#c04d18';
+    rr(-17.5, -10.5, 35, 21, 10.5); ctx.fill();
+    ctx.fillStyle = '#ff8f45';
+    rr(-16.5, -9.5, 33, 19, 9.5); ctx.fill();
 
-    ctx.fillStyle = '#ffb066';
-    rr(3, -6.5, 11, 13, 6); ctx.fill();
-    ctx.fillStyle = 'rgba(205,232,255,0.85)';
-    rr(10.5, -4.5, 3.5, 9, 1.7); ctx.fill();
+    // 车头 + 车灯
+    ctx.fillStyle = '#ffc48f';
+    rr(4, -8, 12.5, 16, 8); ctx.fill();
+    ctx.fillStyle = '#fff3cc';
+    rr(14, -4, 4.5, 8, 2.2); ctx.fill();
 
-    ctx.fillStyle = '#18895a';
-    rr(-18.5, -10, 12, 20, 4.5); ctx.fill();
-    ctx.fillStyle = '#eafff5';
-    rr(-16.5, -6.5, 7.5, 13, 2.5); ctx.fill();
-    if (order && order.state === 'deliver') {
-      ctx.fillStyle = '#ffb066';
-      rr(-15, -2.5, 5, 5, 1.5); ctx.fill();
-    }
+    // 外卖箱
+    ctx.fillStyle = '#0e6f47';
+    rr(-22, -11.5, 14, 23, 5.5); ctx.fill();
+    ctx.fillStyle = '#33c184';
+    rr(-20.5, -10, 11, 20, 4.5); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    rr(-18, -10, 4.5, 20, 2.2); ctx.fill();
 
-    ctx.fillStyle = '#27314c';
-    ctx.beginPath(); ctx.arc(-2, 0, 8.4, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#ffd43b';
-    ctx.beginPath(); ctx.arc(-2, 0, 7.1, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#2a3450';
-    rr(1.5, -4.2, 5.5, 8.4, 2.4); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.beginPath(); ctx.arc(-4.2, -3, 2, 0, TAU); ctx.fill();
+    // 餐箱上的小爱心（载着餐时更亮）
+    const carrying = order && order.state === 'deliver';
+    ctx.fillStyle = carrying ? '#fff0f3' : 'rgba(255,255,255,0.42)';
+    heartShape(-15, 0, carrying ? 3.8 : 3.2);
+
+    // 骑手：大圆头 + 笑脸
+    ctx.fillStyle = '#2a3550';
+    ctx.beginPath(); ctx.arc(-1, 0, 11, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#ffd93d';
+    ctx.beginPath(); ctx.arc(-1, 0, 9.6, 0, TAU); ctx.fill();
+
+    // 腮红
+    ctx.fillStyle = 'rgba(255,145,145,0.62)';
+    ctx.beginPath(); ctx.arc(2.6, -6.4, 2.1, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(2.6, 6.4, 2.1, 0, TAU); ctx.fill();
+
+    // 眼睛
+    ctx.fillStyle = '#2a3550';
+    ctx.beginPath(); ctx.arc(5.4, -3.3, 1.9, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(5.4, 3.3, 1.9, 0, TAU); ctx.fill();
+
+    // 微笑
+    ctx.strokeStyle = '#2a3550';
+    ctx.lineWidth = 1.4;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(8.4, 0, 2.6, -0.85, 0.85);
+    ctx.stroke();
+
+    // 头盔高光
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath(); ctx.arc(-5, -4.2, 2.4, 0, TAU); ctx.fill();
 
     ctx.globalAlpha = 1;
     ctx.restore();
