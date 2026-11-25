@@ -245,7 +245,7 @@
   /* =========================================================
      常量
   ========================================================= */
-  const BLOCK_W = 210, BLOCK_H = 160, ROAD = 96, COLS = 5, ROWS = 5;
+  const BLOCK_W = 212, BLOCK_H = 162, ROAD = 132, COLS = 5, ROWS = 5;
   const WORLD_W = COLS * BLOCK_W + (COLS + 1) * ROAD;
   const WORLD_H = ROWS * BLOCK_H + (ROWS + 1) * ROAD;
   const PR = 14;
@@ -253,6 +253,11 @@
   const PUSH_V = 96;              // 推车速度
   const ZONE = 40;
   const HALF_ROAD = ROAD / 2;
+  // 偶数编号是大路（双向各两车道），奇数编号是小路（双向各一车道）
+  const isWideRoad = (k) => k % 2 === 0;
+  const LANE_MID = 33;    // 小路车道中心
+  const LANE_IN = 16;     // 大路内侧车道
+  const LANE_OUT = 48;    // 大路外侧车道
   const LIGHT_PERIOD = 20;        // 红绿灯整周期（秒）
   const G_T = 8.5;                // 绿灯时长（更久，不用老等）
   const Y_T = 1.0;                // 黄灯时长
@@ -505,7 +510,10 @@
           for (let k = 0; k < n; k++) {
             trees.push({ x: g.x + rand(22, g.w - 22), y: g.y + rand(22, g.h - 22), r: rand(9, 16) });
           }
-          buildings.push({ type: 'park', g, trees });
+          const pond = Math.random() < 0.65
+            ? { x: g.x + rand(30, g.w - 30), y: g.y + rand(26, g.h - 26), rx: rand(16, 26), ry: rand(10, 17) }
+            : null;
+          buildings.push({ type: 'park', g, trees, pond });
         } else {
           const pad = 8;
           const g = { x: bx + pad, y: by + pad, w: BLOCK_W - pad * 2, h: BLOCK_H - pad * 2 };
@@ -528,13 +536,25 @@
               ph: rand(0, TAU)
             });
           }
+          const roofProps = [];
+          const rp = randInt(1, 3);
+          for (let k = 0; k < rp; k++) {
+            roofProps.push({
+              type: pick(['tank', 'ac', 'antenna', 'garden']),
+              x: g.x + rand(22, g.w - 22),
+              y: g.y + rand(22, g.h - 22),
+              r: rand(5, 9),
+              ph: rand(0, TAU)
+            });
+          }
           buildings.push({
             type: 'build', g,
             base: 'hsl(' + hue.toFixed(1) + ' 27% 51%)',
             roof: 'hsl(' + hue.toFixed(1) + ' 30% 63%)',
             roofD: 'hsl(' + hue.toFixed(1) + ' 26% 55%)',
             edge: 'hsl(' + hue.toFixed(1) + ' 30% 42%)',
-            details, wins,
+            details, wins, roofProps,
+            sign: pick(['#ff8787', '#ffd166', '#63e6be', '#a5d8ff', '#ffa94d', '#d0bfff']),
             door: null
           });
         }
@@ -609,13 +629,27 @@
     const lanes = [];
     for (let j = 0; j <= ROWS; j++) {
       const cy = roadCenterY(j);
-      lanes.push({ axis: 'h', fixed: cy - 22, dir: 1, road: j });
-      lanes.push({ axis: 'h', fixed: cy + 22, dir: -1, road: j });
+      if (isWideRoad(j)) {
+        lanes.push({ axis: 'h', fixed: cy - LANE_IN, dir: 1, road: j, outer: false });
+        lanes.push({ axis: 'h', fixed: cy - LANE_OUT, dir: 1, road: j, outer: true });
+        lanes.push({ axis: 'h', fixed: cy + LANE_IN, dir: -1, road: j, outer: false });
+        lanes.push({ axis: 'h', fixed: cy + LANE_OUT, dir: -1, road: j, outer: true });
+      } else {
+        lanes.push({ axis: 'h', fixed: cy - LANE_MID, dir: 1, road: j });
+        lanes.push({ axis: 'h', fixed: cy + LANE_MID, dir: -1, road: j });
+      }
     }
     for (let i = 0; i <= COLS; i++) {
       const cx = roadCenterX(i);
-      lanes.push({ axis: 'v', fixed: cx - 22, dir: 1, road: i });
-      lanes.push({ axis: 'v', fixed: cx + 22, dir: -1, road: i });
+      if (isWideRoad(i)) {
+        lanes.push({ axis: 'v', fixed: cx - LANE_IN, dir: 1, road: i, outer: false });
+        lanes.push({ axis: 'v', fixed: cx - LANE_OUT, dir: 1, road: i, outer: true });
+        lanes.push({ axis: 'v', fixed: cx + LANE_IN, dir: -1, road: i, outer: false });
+        lanes.push({ axis: 'v', fixed: cx + LANE_OUT, dir: -1, road: i, outer: true });
+      } else {
+        lanes.push({ axis: 'v', fixed: cx - LANE_MID, dir: 1, road: i });
+        lanes.push({ axis: 'v', fixed: cx + LANE_MID, dir: -1, road: i });
+      }
     }
     return lanes;
   }
@@ -670,10 +704,10 @@
     let x0, y0, x1, y1;
     if (vertical) {
       const cx = XS[idx];
-      x0 = cx - 46; x1 = cx + 46; y0 = y1 = along;
+      x0 = cx - HALF_ROAD + 6; x1 = cx + HALF_ROAD - 6; y0 = y1 = along;
     } else {
       const cy = YS[idx];
-      y0 = cy - 46; y1 = cy + 46; x0 = x1 = along;
+      y0 = cy - HALF_ROAD + 6; y1 = cy + HALF_ROAD - 6; x0 = x1 = along;
     }
     return {
       x0, y0, x1, y1,
@@ -828,11 +862,11 @@
         if (horiz) {
           const y0 = YS[ri], a0 = XS[seg] + 60, a1 = XS[seg + 1] - 60;
           if (a1 - a0 < 50) continue;
-          x = rand(a0, a1); y = y0; w = 34; h = 88;
+          x = rand(a0, a1); y = y0; w = 36; h = ROAD + 8;
         } else {
           const x0 = XS[ri], b0 = YS[seg] + 60, b1 = YS[seg + 1] - 60;
           if (b1 - b0 < 50) continue;
-          x = x0; y = rand(b0, b1); w = 88; h = 34;
+          x = x0; y = rand(b0, b1); w = ROAD + 8; h = 36;
         }
         if (Math.hypot(x - START.x, y - START.y) < 340) continue;
         let clash = false;
@@ -1817,24 +1851,49 @@
     ctx.fillStyle = road;
     ctx.fillRect(-6, -6, WORLD_W + 12, WORLD_H + 12);
 
-    ctx.strokeStyle = 'rgba(235,240,250,0.20)';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([22, 26]);
+    // 中心双黄线
+    ctx.strokeStyle = 'rgba(255,205,80,0.5)';
+    ctx.lineWidth = 2.4;
     ctx.beginPath();
     for (let j = 0; j <= ROWS; j++) {
       const y = roadCenterY(j);
       for (let i = 0; i < COLS; i++) {
         const x0 = blockX(i);
-        ctx.moveTo(x0, y);
-        ctx.lineTo(x0 + BLOCK_W, y);
+        ctx.moveTo(x0, y - 2.5); ctx.lineTo(x0 + BLOCK_W, y - 2.5);
+        ctx.moveTo(x0, y + 2.5); ctx.lineTo(x0 + BLOCK_W, y + 2.5);
       }
     }
     for (let i = 0; i <= COLS; i++) {
       const x = roadCenterX(i);
       for (let j = 0; j < ROWS; j++) {
         const y0 = blockY(j);
-        ctx.moveTo(x, y0);
-        ctx.lineTo(x, y0 + BLOCK_H);
+        ctx.moveTo(x - 2.5, y0); ctx.lineTo(x - 2.5, y0 + BLOCK_H);
+        ctx.moveTo(x + 2.5, y0); ctx.lineTo(x + 2.5, y0 + BLOCK_H);
+      }
+    }
+    ctx.stroke();
+
+    // 车道分隔线（大路才有）
+    ctx.strokeStyle = 'rgba(235,240,250,0.22)';
+    ctx.lineWidth = 2.6;
+    ctx.setLineDash([20, 24]);
+    ctx.beginPath();
+    for (let j = 0; j <= ROWS; j++) {
+      if (!isWideRoad(j)) continue;
+      const y = roadCenterY(j);
+      for (let i = 0; i < COLS; i++) {
+        const x0 = blockX(i);
+        ctx.moveTo(x0, y - LANE_MID); ctx.lineTo(x0 + BLOCK_W, y - LANE_MID);
+        ctx.moveTo(x0, y + LANE_MID); ctx.lineTo(x0 + BLOCK_W, y + LANE_MID);
+      }
+    }
+    for (let i = 0; i <= COLS; i++) {
+      if (!isWideRoad(i)) continue;
+      const x = roadCenterX(i);
+      for (let j = 0; j < ROWS; j++) {
+        const y0 = blockY(j);
+        ctx.moveTo(x - LANE_MID, y0); ctx.lineTo(x - LANE_MID, y0 + BLOCK_H);
+        ctx.moveTo(x + LANE_MID, y0); ctx.lineTo(x + LANE_MID, y0 + BLOCK_H);
       }
     }
     ctx.stroke();
@@ -2002,6 +2061,17 @@
         rr(g.x + 8, g.y + g.h * 0.44, g.w - 16, g.h * 0.12, 6);
         ctx.fill();
 
+        if (b.pond) {
+          ctx.fillStyle = '#2f5f86';
+          ctx.beginPath();
+          ctx.ellipse(b.pond.x, b.pond.y, b.pond.rx, b.pond.ry, 0, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = 'rgba(150,205,240,0.35)';
+          ctx.beginPath();
+          ctx.ellipse(b.pond.x - b.pond.rx * 0.25, b.pond.y - b.pond.ry * 0.25, b.pond.rx * 0.5, b.pond.ry * 0.4, 0, 0, TAU);
+          ctx.fill();
+        }
+
         for (let k = 0; k < b.trees.length; k++) {
           const t = b.trees[k];
           ctx.fillStyle = 'rgba(0,0,0,0.24)';
@@ -2047,10 +2117,63 @@
           }
         }
 
+        // 屋顶小物件
+        if (b.roofProps) {
+          for (let k = 0; k < b.roofProps.length; k++) {
+            const rp2 = b.roofProps[k];
+            if (rp2.type === 'tank') {
+              ctx.fillStyle = 'rgba(0,0,0,0.16)';
+              ctx.beginPath(); ctx.arc(rp2.x + 2, rp2.y + 3, rp2.r, 0, TAU); ctx.fill();
+              ctx.fillStyle = '#cbd5e1';
+              ctx.beginPath(); ctx.arc(rp2.x, rp2.y, rp2.r, 0, TAU); ctx.fill();
+              ctx.fillStyle = '#94a3b8';
+              ctx.beginPath(); ctx.arc(rp2.x, rp2.y, rp2.r * 0.5, 0, TAU); ctx.fill();
+            } else if (rp2.type === 'ac') {
+              ctx.fillStyle = '#9aa4b2';
+              rr(rp2.x - 7, rp2.y - 5, 14, 10, 2); ctx.fill();
+              ctx.fillStyle = '#6b7686';
+              rr(rp2.x - 4.5, rp2.y - 2.5, 9, 5, 1.5); ctx.fill();
+            } else if (rp2.type === 'antenna') {
+              ctx.strokeStyle = '#64748b';
+              ctx.lineWidth = 1.6;
+              ctx.beginPath(); ctx.moveTo(rp2.x, rp2.y + 9); ctx.lineTo(rp2.x, rp2.y - 9); ctx.stroke();
+              const blink = 0.5 + 0.5 * Math.sin(clock * 2.2 + rp2.ph);
+              ctx.fillStyle = 'rgba(255,107,107,' + (0.35 + 0.65 * blink).toFixed(2) + ')';
+              ctx.beginPath(); ctx.arc(rp2.x, rp2.y - 9, 2.2, 0, TAU); ctx.fill();
+            } else {
+              ctx.fillStyle = '#3f8a4f';
+              rr(rp2.x - 9, rp2.y - 7, 18, 14, 4); ctx.fill();
+              ctx.fillStyle = '#5cb96f';
+              ctx.beginPath(); ctx.arc(rp2.x - 3, rp2.y - 2, 3.4, 0, TAU); ctx.fill();
+              ctx.beginPath(); ctx.arc(rp2.x + 4.5, rp2.y + 2.5, 2.8, 0, TAU); ctx.fill();
+            }
+          }
+        }
+
         ctx.strokeStyle = b.edge;
         ctx.lineWidth = 2;
         rr(g.x + 0.5, g.y + 0.5, g.w - 1, g.h - 1, 12);
         ctx.stroke();
+
+        // 门头雨棚 + 招牌
+        if (b.door && b.sign) {
+          const d = b.door;
+          const dx = d.x - (g.x + g.w / 2);
+          const dy = d.y - (g.y + g.h / 2);
+          ctx.fillStyle = hexA(b.sign, 0.92);
+          if (Math.abs(dx) > Math.abs(dy)) {
+            rr(dx > 0 ? g.x + g.w - 4 : g.x - 7, d.y - 16, 11, 32, 3);
+          } else {
+            rr(d.x - 16, dy > 0 ? g.y + g.h - 4 : g.y - 7, 32, 11, 3);
+          }
+          ctx.fill();
+          if (night > 0.1) {
+            ctx.fillStyle = hexA(b.sign, 0.28 * night);
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, 26 * night + 8, 0, TAU);
+            ctx.fill();
+          }
+        }
       }
     }
   }
@@ -2171,8 +2294,8 @@
         const num = near ? String(Math.ceil(info.left)) : null;
 
         // 灯柱放在路口一角
-        drawSignal(cx - 58, cy - 58, isH, col, num, near);
-        if (hasPolice(i, j)) drawPoliceMan(cx - 30, cy - 58);
+        drawSignal(cx - HALF_ROAD - 14, cy - HALF_ROAD - 14, isH, col, num, near);
+        if (hasPolice(i, j)) drawPoliceMan(cx - HALF_ROAD + 4, cy - HALF_ROAD - 14);
       }
     }
     ctx.globalAlpha = 1;
