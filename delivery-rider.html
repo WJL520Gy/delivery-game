@@ -173,6 +173,7 @@
         <summary>查看天气、车辆和其他规则</summary>
         <ul class="rules">
           <li>连续工作满 8 小时会强制下线休息 3 小时；每天休息不足 6 小时，疲劳会降低车速与抓地力，并增加摔车风险</li>
+          <li>路口斑马线会有行人穿行；接近后减速礼让可得 ¥2，撞到会损失时间和情绪</li>
           <li>一个路口一盏灯；读秒和“下个路口”提示会帮助你判断路线</li>
           <li>商家卡餐不会暂停时限；顾客会催单，也可能请你顺路带东西赚小费</li>
           <li>红灯闯行可能罚款；交警路口处罚更重。撞车、湿滑摔倒会损失时间和情绪</li>
@@ -631,6 +632,10 @@
             details, wins, roofProps,
             planters: Math.random() < 0.45 ? { edge: randInt(0, 3) } : null,
             solar: Math.random() < 0.32,
+            roofRoom: Math.random() < 0.72 ? {
+              x: g.x + rand(18, g.w - 58), y: g.y + rand(18, g.h - 48),
+              w: rand(30, 48), h: rand(25, 38)
+            } : null,
             led: Math.random() < 0.26 ? { text: pick(LED_TEXTS), ph: rand(0, TAU) } : null,
             sign: shop.color, shop, laundry, hasCat,
             ph: rand(0, TAU),
@@ -778,24 +783,30 @@
   /* ---------- 过马路的行人 ---------- */
   function makePed() {
     const vertical = Math.random() < 0.5;
-    const idx = randInt(1, 3);
-    const along = rand(140, vertical ? WORLD_H - 140 : WORLD_W - 140);
+    const idx = randInt(1, vertical ? COLS - 1 : ROWS - 1);
+    const road = randInt(0, vertical ? ROWS : COLS);
     let x0, y0, x1, y1;
     if (vertical) {
       const cx = XS[idx];
-      x0 = cx - HALF_ROAD + 6; x1 = cx + HALF_ROAD - 6; y0 = y1 = along;
+      x0 = cx + rand(-10, 10); x1 = x0;
+      y0 = YS[road] - HALF_ROAD + 8; y1 = YS[road] + HALF_ROAD - 8;
     } else {
       const cy = YS[idx];
-      y0 = cy - HALF_ROAD + 6; y1 = cy + HALF_ROAD - 6; x0 = x1 = along;
+      y0 = cy + rand(-10, 10); y1 = y0;
+      x0 = XS[road] - HALF_ROAD + 8; x1 = XS[road] + HALF_ROAD - 8;
     }
     return {
       x0, y0, x1, y1,
+      crossAxis: vertical ? 'v' : 'h',
       t: Math.random(),
       dir: Math.random() < 0.5 ? 1 : -1,
       speed: rand(26, 42),
       color: pick(['#e57373', '#64b5f6', '#81c784', '#ffb74d', '#ba68c8', '#4db6ac', '#f06292']),
+      bagColor: pick(['#8b5e3c', '#334155', '#2f6b5b', '#824f71']),
+      umbrella: Math.random() < 0.48,
       ph: rand(0, TAU),
-      wait: 0
+      wait: 0,
+      yielded: false
     };
   }
 
@@ -810,16 +821,26 @@
       if (p.wait > 0) { p.wait -= dt; continue; }
       const len = Math.hypot(p.x1 - p.x0, p.y1 - p.y0) || 1;
       p.t += p.dir * (p.speed / len) * dt;
-      if (p.t >= 1) { p.t = 1; p.dir = -1; p.wait = rand(0.4, 2.2); }
-      if (p.t <= 0) { p.t = 0; p.dir = 1; p.wait = rand(0.4, 2.2); }
+      if (p.t >= 1) { p.t = 1; p.dir = -1; p.wait = rand(0.4, 2.2); p.yielded = false; }
+      if (p.t <= 0) { p.t = 0; p.dir = 1; p.wait = rand(0.4, 2.2); p.yielded = false; }
     }
 
     if (player.invuln > 0) return;
+    const speed = Math.hypot(player.vx, player.vy);
     for (let i = 0; i < peds.length; i++) {
       const p = peds[i];
       const wx = p.x0 + (p.x1 - p.x0) * p.t;
       const wy = p.y0 + (p.y1 - p.y0) * p.t;
-      if (Math.hypot(wx - player.x, wy - player.y) < 26) {
+      const distance = Math.hypot(wx - player.x, wy - player.y);
+      if (!p.yielded && distance >= 28 && distance < 48 && speed < 48) {
+        p.yielded = true;
+        money += 2;
+        grossMoney += 2;
+        mood = clamp(mood + 1.5, 0, 100);
+        sfx('bell');
+        addText(player.x, player.y - 38, '礼让行人 +¥2', '#8ce99a', 0.95);
+      }
+      if (distance < 26) {
         player.invuln = 1.6;
         player.stun = 0.35;
         player.vx *= 0.2;
@@ -845,13 +866,45 @@
       ctx.fillStyle = 'rgba(0,0,0,0.22)';
       ctx.beginPath(); ctx.ellipse(0, 5, 9, 4.5, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = p.color;
-      rr(-5, -5 + bob, 10, 13, 5); ctx.fill();
+      // 外套、背包与摆臂，让行人在俯视地图里更容易辨认。
+      ctx.strokeStyle = p.color;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath(); ctx.moveTo(-4, -1 + bob); ctx.lineTo(-8, 3 + bob); ctx.moveTo(4, -1 + bob); ctx.lineTo(8, 2 + bob); ctx.stroke();
+      rr(-5, -5 + bob, 10, 13, 4); ctx.fill();
+      ctx.fillStyle = p.bagColor;
+      rr(3, -3 + bob, 5, 7, 1.5); ctx.fill();
+      if ((wx.rain || wx.snow) && p.umbrella) {
+        ctx.fillStyle = 'rgba(38,74,102,0.88)';
+        ctx.beginPath(); ctx.ellipse(0, -12 + bob, 12, 4.8, 0, Math.PI, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(35,45,55,0.8)'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(0, -12 + bob); ctx.lineTo(1, -3 + bob); ctx.stroke();
+      }
       ctx.fillStyle = '#f2d3a8';
       ctx.beginPath(); ctx.arc(0, -9 + bob, 5, 0, TAU); ctx.fill();
       ctx.fillStyle = '#3b2f2a';
       ctx.beginPath(); ctx.arc(0, -10 + bob, 5, Math.PI, TAU); ctx.fill();
+      ctx.fillStyle = '#272d36';
+      ctx.beginPath(); ctx.ellipse(-2.5, 8 + bob, 2.5, 1.7, 0, 0, TAU); ctx.ellipse(2.5, 8 + bob, 2.5, 1.7, 0, 0, TAU); ctx.fill();
       ctx.restore();
     }
+  }
+
+  function drawCrosswalks() {
+    ctx.save();
+    ctx.fillStyle = 'rgba(240,244,250,0.38)';
+    for (let i = 0; i < peds.length; i++) {
+      const p = peds[i];
+      if (p.crossAxis === 'v') {
+        const x = p.x0;
+        const y0 = Math.min(p.y0, p.y1), y1 = Math.max(p.y0, p.y1);
+        for (let k = 0; k < 5; k++) ctx.fillRect(x - 19, y0 + 3 + k * 9, 38, 4);
+      } else {
+        const y = p.y0;
+        const x0 = Math.min(p.x0, p.x1), x1 = Math.max(p.x0, p.x1);
+        for (let k = 0; k < 5; k++) ctx.fillRect(x0 + 3 + k * 9, y - 19, 4, 38);
+      }
+    }
+    ctx.restore();
   }
 
   /* =========================================================
@@ -2522,15 +2575,44 @@
           ctx.fill();
         }
 
-        // 夜里亮着的窗
-        if (night > 0.05) {
-          for (let k = 0; k < b.wins.length; k++) {
-            const w = b.wins[k];
-            const flick = 0.75 + 0.25 * Math.sin(clock * 0.7 + w.ph);
-            ctx.fillStyle = 'rgba(255,213,130,' + (night * 0.75 * flick) + ')';
-            rr(w.x, w.y, w.w, w.h, 2);
-            ctx.fill();
-          }
+        // 屋顶女儿墙与楼梯间，让建筑不再像一块纯色方砖。
+        ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+        ctx.lineWidth = 2;
+        rr(g.x + 12, g.y + 12, g.w - 24, g.h - 24, 7);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(30,38,49,0.16)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(g.x + 17, g.y + g.h * 0.38); ctx.lineTo(g.x + g.w - 17, g.y + g.h * 0.38);
+        ctx.moveTo(g.x + 17, g.y + g.h * 0.68); ctx.lineTo(g.x + g.w - 17, g.y + g.h * 0.68);
+        ctx.stroke();
+
+        if (b.roofRoom) {
+          const r = b.roofRoom;
+          ctx.fillStyle = 'rgba(0,0,0,0.24)';
+          rr(r.x + 4, r.y + 5, r.w, r.h, 4); ctx.fill();
+          ctx.fillStyle = b.edge;
+          rr(r.x, r.y + 3, r.w, r.h, 4); ctx.fill();
+          ctx.fillStyle = '#d8d2c5';
+          rr(r.x + 2, r.y, r.w - 4, r.h - 4, 3); ctx.fill();
+          ctx.fillStyle = 'rgba(90,145,166,0.8)';
+          rr(r.x + 6, r.y + 5, Math.max(8, r.w - 12), 5, 2); ctx.fill();
+          ctx.fillStyle = '#8c735d';
+          rr(r.x + r.w - 10, r.y + r.h - 13, 5, 9, 1); ctx.fill();
+        }
+
+        // 日间玻璃反光，夜间窗灯随住户作息闪亮。
+        for (let k = 0; k < b.wins.length; k++) {
+          const w = b.wins[k];
+          const flick = 0.75 + 0.25 * Math.sin(clock * 0.7 + w.ph);
+          ctx.fillStyle = 'rgba(29,39,51,0.58)';
+          rr(w.x - 2, w.y - 2, w.w + 4, w.h + 4, 3); ctx.fill();
+          ctx.fillStyle = night > 0.05
+            ? 'rgba(255,213,130,' + (night * 0.78 * flick) + ')'
+            : 'rgba(135,190,207,0.74)';
+          rr(w.x, w.y, w.w, w.h, 2); ctx.fill();
+          ctx.fillStyle = night > 0.05 ? 'rgba(255,245,204,0.38)' : 'rgba(255,255,255,0.48)';
+          ctx.fillRect(w.x + 2, w.y + 1, Math.max(2, w.w * 0.28), 1.5);
         }
 
         // 屋顶小物件
@@ -3906,6 +3988,7 @@
     drawStalls();
     drawClosures();
     drawLights();
+    drawCrosswalks();
     drawGuide();
     drawGoals();
     drawWaitGauge();
