@@ -172,6 +172,7 @@
       <details class="more-rules">
         <summary>查看天气、车辆和其他规则</summary>
         <ul class="rules">
+          <li>连续工作满 8 小时会强制下线休息 3 小时；每天休息不足 6 小时，疲劳会降低车速与抓地力，并增加摔车风险</li>
           <li>一个路口一盏灯；读秒和“下个路口”提示会帮助你判断路线</li>
           <li>商家卡餐不会暂停时限；顾客会催单，也可能请你顺路带东西赚小费</li>
           <li>红灯闯行可能罚款；交警路口处罚更重。撞车、湿滑摔倒会损失时间和情绪</li>
@@ -231,6 +232,16 @@
       <p class="muted">深呼吸，看看路况。</p>
       <button id="btnResume" class="primary">继续送餐</button>
       <div class="foot">按 <kbd>P</kbd> / <kbd>Esc</kbd> 继续</div>
+    </div>
+  </div>
+
+  <div id="screenRest" class="overlay">
+    <div class="card small">
+      <div class="kicker">平台强制下线 · 安全休息</div>
+      <h2>连续工作 8 小时了</h2>
+      <p style="color:#aab6c6;line-height:1.8">休息期间无法接单。至少休息 3 小时后才能重新上线；当天累计休息不足 6 小时，疲劳会降低效率并增加安全风险。</p>
+      <div id="restTimer" style="margin:16px 0;color:#ffd166;font-size:24px;font-weight:800">还需休息 3小时</div>
+      <div id="restProgress" style="color:#8b98a8;font-size:12px">今日休息 6/6 小时 · 已达标</div>
     </div>
   </div>
 </div>
@@ -391,8 +402,14 @@
   let lowBatFlag = false, lowMoodFlag = false;
   let graceHint = false;
   let gameMin = 10 * 60 + 30;   // 营业时间，从上午 10:30 开始
+  let workStreakHours = 0;
+  let restTodayHours = 6; // 开班前已完成夜间休息
+  let lastSimDay = 0;
+  let forcedRestHours = 0;
+  let simTotalMinutes = 10 * 60 + 30;
   let holiday = false;
   const CLOCK_SPEED = 2.0;      // 1 秒 = 2 分钟营业时间
+  const REST_CLOCK_SPEED = 120; // 强制休息阶段时间加速：1 秒 = 2 小时
   let sprint = 0, sprintT = 0;
   let rush = null;
 
@@ -1544,7 +1561,7 @@
     sfx('slip');
     addText(player.x, player.y - 40, '打滑！', '#ffd166', 1.1);
     mood = clamp(mood - 3, 0, 100);
-    if (speed > MAXV * 0.88 && falls < 3 && Math.random() < 0.35) {
+    if (speed > MAXV * 0.88 && falls < 3 && Math.random() < 0.35 + 0.25 * fatigueLevel()) {
       player.slipT = 0;
       player.fallT = 1.5;
       player.stun = 1.5;
@@ -1582,7 +1599,7 @@
       sprintT -= dt;
       player.invuln = Math.max(player.invuln, 0.12);
     }
-    let maxV = MAXV * wx.speed * (W < 660 ? 0.88 : 1) * upBike;
+    let maxV = MAXV * wx.speed * (W < 660 ? 0.88 : 1) * upBike * (1 - 0.18 * fatigueLevel());
     if (sprintT > 0) maxV *= 1.45;
     if (pushing) maxV = Math.min(maxV, PUSH_V);
     // 电量低于 30% 开始掉速（最多 -25%）
@@ -1599,7 +1616,7 @@
       banner('情绪低落 · 送单速度下降');
     }
 
-    const grip = clamp(wx.grip * (0.82 + 0.18 * mood / 100) * upRain, 0.35, 1);
+    const grip = clamp(wx.grip * (0.82 + 0.18 * mood / 100) * upRain * (1 - 0.20 * fatigueLevel()), 0.25, 1);
     const k = 1 - Math.exp(-(10 * grip) * dt);
     player.vx = lerp(player.vx, ix * maxV, k);
     player.vy = lerp(player.vy, iy * maxV, k);
@@ -2019,6 +2036,23 @@
       elapsed += dt;
       if (pushing) pushSeconds += dt;
       gameMin = (gameMin + dt * CLOCK_SPEED) % 1440;
+      simTotalMinutes += dt * CLOCK_SPEED;
+      const simDay = Math.floor(simTotalMinutes / 1440);
+      if (simDay !== lastSimDay) { lastSimDay = simDay; restTodayHours = 0; }
+      workStreakHours += dt * CLOCK_SPEED / 60;
+      if (workStreakHours >= 8) {
+        workStreakHours = 0;
+        forcedRestHours = 3;
+        state = 'rest';
+        stick = null;
+        keys.clear();
+        document.getElementById('restTimer').textContent = '还需休息 3.0 小时';
+        document.getElementById('screenRest').classList.add('show');
+        updateFatigueUI();
+        banner('连续工作 8 小时 · 平台强制下线休息 3 小时');
+        return;
+      }
+      updateFatigueUI();
       updateNight();
       updateWind(dt);
       updateHeat(dt);
@@ -2037,12 +2071,33 @@
       if (ca === 'g' && lastLCol && lastLCol !== 'g' && Math.hypot(player.vx, player.vy) < 70) sfx('bell');
       lastLCol = ca;
       if (wxKey === 'storm' && Math.random() < dt * 0.09) flashT = 0.14;
+    } else if (state === 'rest') {
+      const simHours = dt * REST_CLOCK_SPEED / 3600;
+      forcedRestHours = Math.max(0, forcedRestHours - simHours);
+      restTodayHours += simHours;
+      simTotalMinutes += simHours * 60;
+      gameMin = (gameMin + simHours * 60) % 1440;
+      updateNight();
+      const timer = document.getElementById('restTimer');
+      if (timer) timer.textContent = forcedRestHours > 0 ? '还需休息 ' + forcedRestHours.toFixed(1) + ' 小时' : '休息完成，正在重新上线…';
+      updateFatigueUI();
+      if (forcedRestHours <= 0) {
+        document.getElementById('screenRest').classList.remove('show');
+        state = 'playing';
+        banner(restTodayHours >= 6 ? '休息完成 · 安全上线' : '休息 3 小时完成 · 疲劳仍会影响效率与安全');
+      }
     } else if (state === 'menu') {
       updateCars(dt);
     }
     updatePrecip(dt);
     updateEffects(dt);
     updateCamera(dt);
+  }
+
+  function fatigueLevel() { return restTodayHours >= 6 ? 0 : (6 - restTodayHours) / 6; }
+  function updateFatigueUI() {
+    const progress = document.getElementById('restProgress');
+    if (progress) progress.textContent = '今日休息 ' + Math.min(restTodayHours, 6).toFixed(1) + '/6 小时' + (restTodayHours < 6 ? ' · 疲劳影响中' : ' · 已达标');
   }
 
   /* =========================================================
@@ -3346,7 +3401,7 @@
     const px = (narrow ? 12 : 16) * UI;
     const py = (narrow ? 12 : 16) * UI;
     const pw = (narrow ? 158 : 208) * UI;
-    const ph = (narrow ? 120 : 126) * UI;
+    const ph = (narrow ? 138 : 146) * UI;
 
     panel(px, py, pw, ph);
     hudBoxes.panel = { x: px, y: py, w: pw, h: ph };
@@ -3387,6 +3442,10 @@
     ctx.fillText('情绪', px + 14 * UI, py + 107 * UI);
     const moodCol = mood < 25 ? '#ff6b6b' : mood < 50 ? '#fcc419' : '#4dabf7';
     bar(px + 52 * UI, py + 100 * UI, bw, 7 * UI, mood / 100, moodCol);
+
+    ctx.fillStyle = restTodayHours < 6 ? '#ffb86b' : '#8ce99a';
+    ctx.fillText('休息6h', px + 14 * UI, py + 125 * UI);
+    bar(px + 52 * UI, py + 118 * UI, bw, 7 * UI, restTodayHours / 6, restTodayHours < 6 ? '#ff922b' : '#51cf66');
 
     if (pushing) {
       ctx.fillStyle = '#ff8787';
@@ -3890,6 +3949,7 @@
     elMenu.classList.remove('show');
     elOver.classList.remove('show');
     elPause.classList.remove('show');
+    document.getElementById('screenRest').classList.remove('show');
     const sh = document.getElementById('screenShop');
     if (sh) sh.classList.remove('show');
   }
@@ -3909,6 +3969,12 @@
     bikeDown = 0; heatT = 0; gustT = 0; gustPower = 0;
     night = 0; elapsed = 0; lastLCol = '';
     gameMin = 10 * 60 + 30;
+    workStreakHours = 0;
+    restTodayHours = 6;
+    lastSimDay = 0;
+    forcedRestHours = 0;
+    simTotalMinutes = gameMin;
+    updateFatigueUI();
     const wd = new Date().getDay();
     holiday = (wd === 0 || wd === 6) || Math.random() < 0.18;
     ev = { next: 14, dog: null };
@@ -3974,6 +4040,7 @@
     if (violations > 0) events.push('闯红灯 ' + violations + ' 次，系统记得送达时间，不记得你等过几轮红灯');
     if (rejects > 0) events.push('拒单 ' + rejects + ' 次，扣款 ¥' + (rejects * 8) + '；不接要付钱，接了要赶时间');
     if (complaints > 0) events.push(complaints + ' 单留下差评，你不是不想快，是路上真的快不了');
+    events.push('今日累计休息 ' + Math.min(restTodayHours, 24).toFixed(1) + ' 小时' + (restTodayHours < 6 ? '，未达到 6 小时，疲劳已降低车速并增加湿滑摔车风险' : '，达到每日 6 小时休息标准'));
     if (!events.length) events.push('今天没出事，只是运气好。明天还得出车');
     return '<b>今天跑了 ' + ordersDone + ' 单，订单流水 ¥' + grossMoney + '，扣掉罚款后到手 ¥' + money + '。</b><br>' + events.join('。<br>') + '。';
   }

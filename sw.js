@@ -1,5 +1,5 @@
 /* 极速外卖 · 离线缓存（页面走网络优先，保证每次打开都是最新版） */
-const CACHE = 'jsw-delivery-v4';
+const CACHE = 'jsw-delivery-v5';
 const ASSETS = [
   './',
   './delivery-rider.html',
