@@ -363,6 +363,8 @@
   let closures = [];
   let police = [];
   let policePaid = {};
+  let goodReviews = 0, badReviews = 0;
+  let lowBatFlag = false, lowMoodFlag = false;
   let graceHint = false;
   let gameMin = 10 * 60 + 30;   // 营业时间，从上午 10:30 开始
   let holiday = false;
@@ -1076,6 +1078,17 @@
     money += total;
     ordersDone++;
     sprint = Math.min(100, sprint + 18);
+
+    // 顾客评价：好评安抚情绪，差评打击情绪
+    if (order.annoy >= 2) {
+      mood = clamp(mood - 9, 0, 100);
+      badReviews++;
+      addText(order.drop.x, order.drop.y - 96, '顾客：差评 ✖', '#ff6b6b', 1.15);
+    } else {
+      mood = clamp(mood + 9, 0, 100);
+      goodReviews++;
+      addText(order.drop.x, order.drop.y - 96, '顾客：★★★★★ 好评', '#ffd43b', 1.1);
+    }
     if (save) {
       save.goals.orders++;
       save.goals.money += total;
@@ -1083,7 +1096,6 @@
       checkGoals();
     }
     if (order.annoy >= 2) complaints++;
-    mood = clamp(mood + 7, 0, 100);
 
     ring(order.drop.x, order.drop.y, '#63e6be');
     burst(order.drop.x, order.drop.y, 22, '#63e6be', 1);
@@ -1457,9 +1469,21 @@
     let maxV = MAXV * wx.speed * (W < 660 ? 0.88 : 1) * upBike;
     if (sprintT > 0) maxV *= 1.45;
     if (pushing) maxV = Math.min(maxV, PUSH_V);
-    if (mood < 25) maxV *= 0.93;
+    // 电量低于 30% 开始掉速（最多 -25%）
+    if (battery < 30) maxV *= 1 - 0.25 * (30 - battery) / 30;
+    // 情绪低于 70 开始掉速（最多 -30%）
+    if (mood < 70) maxV *= 1 - 0.30 * (70 - mood) / 70;
 
-    const grip = clamp(wx.grip * (mood < 25 ? 0.9 : 1) * upRain, 0.4, 1);
+    if (battery < 30 && !lowBatFlag) {
+      lowBatFlag = true;
+      banner('电量不足 · 车速开始下降');
+    }
+    if (mood < 35 && !lowMoodFlag) {
+      lowMoodFlag = true;
+      banner('情绪低落 · 送单速度下降');
+    }
+
+    const grip = clamp(wx.grip * (0.82 + 0.18 * mood / 100) * upRain, 0.35, 1);
     const k = 1 - Math.exp(-(10 * grip) * dt);
     player.vx = lerp(player.vx, ix * maxV, k);
     player.vy = lerp(player.vy, iy * maxV, k);
@@ -2906,16 +2930,16 @@
     /* ---- 好评星 ---- */
     if (narrow) {
       const sy = py + 20 * UI;
-      for (let i = 0; i < 3; i++) {
-        star(px + pw + 18 * UI + i * 20 * UI, sy, 7.5 * UI, i < lives ? '#ffd43b' : 'rgba(255,255,255,0.14)');
+      for (let i = 0; i < 5; i++) {
+        star(px + pw + 16 * UI + i * 18 * UI, sy, 7 * UI, i < lives ? '#ffd43b' : 'rgba(255,255,255,0.14)');
       }
     } else {
       const sy = py + ph + 22 * UI;
       ctx.fillStyle = '#8b98a8';
       ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
       ctx.fillText('好评', px + 2 * UI, sy + 4 * UI);
-      for (let i = 0; i < 3; i++) {
-        star(px + 42 * UI + i * 26 * UI, sy, 9.5 * UI, i < lives ? '#ffd43b' : 'rgba(255,255,255,0.14)');
+      for (let i = 0; i < 5; i++) {
+        star(px + 42 * UI + i * 24 * UI, sy, 9 * UI, i < lives ? '#ffd43b' : 'rgba(255,255,255,0.14)');
       }
     }
 
@@ -3391,7 +3415,7 @@
   function startGame() {
     hideAll();
     ac();
-    money = 0; ordersDone = 0; lives = 3; combo = 0; bestCombo = 0;
+    money = 0; ordersDone = 0; lives = 5; combo = 0; bestCombo = 0;
     fines = 0; violations = 0; falls = 0; complaints = 0; rejects = 0;
     particles.length = 0; texts.length = 0; rings.length = 0;
     stick = null; hurryCd = 0; flashT = 0; bannerT = 0; kickCd = 0;
@@ -3425,6 +3449,8 @@
     sprint = 0; sprintT = 0; rush = null;
     policePaid = {};
     graceHint = false;
+    goodReviews = 0; badReviews = 0;
+    lowBatFlag = false; lowMoodFlag = false;
     buildClosures();
     buildPolice();
 
@@ -3489,7 +3515,7 @@
     persist();
 
     const rank = money >= 320 ? '金牌骑手' : money >= 180 ? '熟练骑手' : money >= 80 ? '新手骑手' : '路痴骑手';
-    elRank.textContent = rank;
+    elRank.textContent = rank + ' · 好评 ' + goodReviews + ' / 差评 ' + badReviews;
     elMoney.textContent = '¥' + money;
     elOrders.textContent = String(ordersDone);
     elFines.textContent = '¥' + fines;
