@@ -364,6 +364,7 @@
   let police = [];
   let policePaid = {};
   let goodReviews = 0, badReviews = 0;
+  let longWaits = 0;
   let lowBatFlag = false, lowMoodFlag = false;
   let graceHint = false;
   let gameMin = 10 * 60 + 30;   // 营业时间，从上午 10:30 开始
@@ -967,6 +968,12 @@
     ring(order.pickup.x, order.pickup.y, '#ff9f43');
     burst(order.pickup.x, order.pickup.y, 10, '#ffd8a8', 0.6);
     addText(order.pickup.x, order.pickup.y - 44, '取餐成功', '#ffd8a8');
+    if (order.waitMax >= 7.5) {
+      const extra = Math.min(8, Math.round((order.waitMax - 7) * 1.1));
+      mood = clamp(mood - extra, 0, 100);
+      longWaits++;
+      addText(order.pickup.x, order.pickup.y - 70, '等太久了 · 情绪 -' + extra, '#ff8787', 0.95, 0.35);
+    }
     // 借商家的换电柜换一块满电的
     if (battery < 92 || pushing) {
       addText(order.pickup.x, order.pickup.y - 70, '换电完成', '#8ce99a', 0.9, 0.4);
@@ -1820,6 +1827,9 @@
 
     if (order.state === 'waiting') {
       order.wait -= dt;
+      // 卡餐也在磨情绪：等得越久、越是高峰期，掉得越快
+      const rate = busyFactor() >= 1.7 ? 3.0 : 1.8;
+      mood = clamp(mood - dt * rate, 0, 100);
       if (order.wait <= 0) pickedUp();
       return;
     }
@@ -3449,7 +3459,7 @@
     sprint = 0; sprintT = 0; rush = null;
     policePaid = {};
     graceHint = false;
-    goodReviews = 0; badReviews = 0;
+    goodReviews = 0; badReviews = 0; longWaits = 0;
     lowBatFlag = false; lowMoodFlag = false;
     buildClosures();
     buildPolice();
@@ -3516,6 +3526,7 @@
 
     const rank = money >= 320 ? '金牌骑手' : money >= 180 ? '熟练骑手' : money >= 80 ? '新手骑手' : '路痴骑手';
     elRank.textContent = rank + ' · 好评 ' + goodReviews + ' / 差评 ' + badReviews;
+    if (longWaits > 0) elRank.textContent += ' · 长等餐 ' + longWaits + ' 次';
     elMoney.textContent = '¥' + money;
     elOrders.textContent = String(ordersDone);
     elFines.textContent = '¥' + fines;
