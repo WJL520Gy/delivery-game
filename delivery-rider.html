@@ -381,6 +381,16 @@
     { id: 'box', ico: '🍱', name: '保温餐箱', desc: '小费更高（每级 +10%）', max: 3 },
     { id: 'bike', ico: '🛵', name: '改装电机', desc: '极速更快（每级 +4%）', max: 3 }
   ];
+  const SHOPS = [
+    { name: '便利店', char: '便', color: '#4dabf7' },
+    { name: '药店', char: '药', color: '#51cf66' },
+    { name: '奶茶店', char: '茶', color: '#ffa94d' },
+    { name: '花店', char: '花', color: '#f06595' },
+    { name: '小餐馆', char: '餐', color: '#ff8787' },
+    { name: '超市', char: '超', color: '#ffd43b' },
+    { name: '面馆', char: '面', color: '#e8b06a' },
+    { name: '水果摊', char: '果', color: '#8ce99a' }
+  ];
   const GOALS = [
     { id: 'orders', text: '今日完成 5 单', target: 5, reward: 30 },
     { id: 'money', text: '今日收入 ¥200', target: 200, reward: 30 },
@@ -555,6 +565,14 @@
               ph: rand(0, TAU)
             });
           }
+          const shop = pick(SHOPS);
+          const laundry = Math.random() < 0.55 ? {
+            x1: g.x + g.w * 0.15, y1: g.y + g.h * 0.72,
+            x2: g.x + g.w * 0.85, y2: g.y + g.h * 0.78,
+            items: [0, 1, 2].map((k) => ({ c: pick(['#ff8787', '#ffd166', '#a5d8ff', '#63e6be', '#f7a1c4']), ph: rand(0, TAU) }))
+          } : null;
+          const hasCat = Math.random() < 0.42;
+
           buildings.push({
             type: 'build', g,
             base: 'hsl(' + hue.toFixed(1) + ' 27% 51%)',
@@ -562,8 +580,9 @@
             roofD: 'hsl(' + hue.toFixed(1) + ' 26% 55%)',
             edge: 'hsl(' + hue.toFixed(1) + ' 30% 42%)',
             details, wins, roofProps,
-            sign: pick(['#ff8787', '#ffd166', '#63e6be', '#a5d8ff', '#ffa94d', '#d0bfff']),
-            door: null
+            sign: shop.color, shop, laundry, hasCat,
+            ph: rand(0, TAU),
+            door: makeDoor({ g })
           });
         }
       }
@@ -2284,24 +2303,104 @@
         rr(g.x + 0.5, g.y + 0.5, g.w - 1, g.h - 1, 12);
         ctx.stroke();
 
-        // 门头雨棚 + 招牌
-        if (b.door && b.sign) {
+        // 门头雨棚 + 店招
+        if (b.door && b.shop) {
           const d = b.door;
           const dx = d.x - (g.x + g.w / 2);
           const dy = d.y - (g.y + g.h / 2);
-          ctx.fillStyle = hexA(b.sign, 0.92);
-          if (Math.abs(dx) > Math.abs(dy)) {
-            rr(dx > 0 ? g.x + g.w - 4 : g.x - 7, d.y - 16, 11, 32, 3);
-          } else {
-            rr(d.x - 16, dy > 0 ? g.y + g.h - 4 : g.y - 7, 32, 11, 3);
-          }
+          const sideX = Math.abs(dx) > Math.abs(dy);
+
+          ctx.fillStyle = hexA(b.shop.color, 0.92);
+          if (sideX) rr(dx > 0 ? g.x + g.w - 4 : g.x - 7, d.y - 16, 11, 32, 3);
+          else rr(d.x - 16, dy > 0 ? g.y + g.h - 4 : g.y - 7, 32, 11, 3);
           ctx.fill();
+
+          const ox = sideX ? (dx > 0 ? 14 : -14) : 0;
+          const oy = sideX ? 0 : (dy > 0 ? 14 : -14);
+          const gx2 = d.x + ox, gy2 = d.y + oy;
+          ctx.fillStyle = 'rgba(12,16,24,0.85)';
+          rr(gx2 - 12, gy2 - 12, 24, 24, 5);
+          ctx.fill();
+          ctx.fillStyle = hexA(b.shop.color, 0.95);
+          rr(gx2 - 10, gy2 - 10, 20, 20, 4);
+          ctx.fill();
+          ctx.fillStyle = '#1b1205';
+          ctx.font = '800 13px ' + FONT;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(b.shop.char, gx2, gy2 + 1);
+          ctx.textBaseline = 'alphabetic';
+
           if (night > 0.1) {
-            ctx.fillStyle = hexA(b.sign, 0.28 * night);
+            ctx.fillStyle = hexA(b.shop.color, 0.3 * night);
             ctx.beginPath();
-            ctx.arc(d.x, d.y, 26 * night + 8, 0, TAU);
+            ctx.arc(d.x, d.y, 30 * night + 10, 0, TAU);
             ctx.fill();
           }
+        }
+
+        // 夜间霓虹灯带
+        if (night > 0.15) {
+          const glow = 0.45 + 0.35 * Math.sin(clock * 1.8 + b.ph);
+          ctx.strokeStyle = hexA(b.shop.color, 0.55 * night * glow);
+          ctx.lineWidth = 3;
+          rr(g.x + 3, g.y + 3, g.w - 6, g.h - 6, 10);
+          ctx.stroke();
+        }
+
+        // 屋顶晾衣绳
+        if (b.laundry) {
+          const L = b.laundry;
+          ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(L.x1, L.y1);
+          ctx.lineTo(L.x2, L.y2);
+          ctx.stroke();
+          for (let k = 0; k < L.items.length; k++) {
+            const it = L.items[k];
+            const t2 = 0.18 + 0.3 * k;
+            const lx = L.x1 + (L.x2 - L.x1) * t2;
+            const ly = L.y1 + (L.y2 - L.y1) * t2;
+            const sway = Math.sin(clock * 2.2 + it.ph) * 2.4;
+            ctx.fillStyle = it.c;
+            rr(lx - 4 + sway, ly + 1, 8, 10, 2);
+            ctx.fill();
+          }
+        }
+
+        // 屋顶小猫（来回踱步）
+        if (b.hasCat) {
+          const span = g.w * 0.55;
+          const cyc = clock * 0.28 + b.ph;
+          const cxx = g.x + g.w * 0.22 + (0.5 - 0.5 * Math.cos(cyc)) * span;
+          const cyy = g.y + g.h - 13;
+          const face = Math.sin(cyc) >= 0 ? 1 : -1;
+          ctx.save();
+          ctx.translate(cxx, cyy);
+          ctx.scale(face, 1);
+          ctx.fillStyle = 'rgba(0,0,0,0.18)';
+          ctx.beginPath();
+          ctx.ellipse(0, 4, 8, 3.4, 0, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#f2a65a';
+          rr(-7, -4, 13, 7, 3.4);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(7, -2, 3.6, 0, TAU);
+          ctx.fill();
+          ctx.fillStyle = '#e08c3f';
+          ctx.beginPath();
+          ctx.moveTo(5, -5); ctx.lineTo(6.5, -8.5); ctx.lineTo(8, -5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.strokeStyle = '#f2a65a';
+          ctx.lineWidth = 1.6;
+          ctx.beginPath();
+          ctx.moveTo(-7, -2);
+          ctx.quadraticCurveTo(-12, -8, -10, -12);
+          ctx.stroke();
+          ctx.restore();
         }
       }
     }
