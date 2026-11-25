@@ -364,6 +364,9 @@
   let police = [];
   let policePaid = {};
   let graceHint = false;
+  let gameMin = 10 * 60 + 30;   // 营业时间，从上午 10:30 开始
+  let holiday = false;
+  const CLOCK_SPEED = 2.0;      // 1 秒 = 2 分钟营业时间
   let sprint = 0, sprintT = 0;
   let rush = null;
 
@@ -780,6 +783,30 @@
   /* =========================================================
      订单
   ========================================================= */
+  // 营业时段：早高峰 / 午高峰 / 晚高峰 / 夜宵 / 平峰
+  function dayPeriod() {
+    const m = gameMin;
+    if (m >= 11 * 60 + 30 && m < 13 * 60 + 30) return { key: 'lunch', name: '午高峰', busy: 1.9, pay: 1.2, color: '#ffa94d' };
+    if (m >= 17 * 60 && m < 19 * 60 + 30) return { key: 'dinner', name: '晚高峰', busy: 2.1, pay: 1.25, color: '#ff8787' };
+    if (m >= 22 * 60 || m < 90) return { key: 'late', name: '夜宵', busy: 1.35, pay: 1.15, color: '#b197fc' };
+    if (m >= 6 * 60 && m < 9 * 60) return { key: 'morning', name: '早高峰', busy: 1.5, pay: 1.1, color: '#ffd166' };
+    return { key: 'flat', name: '平峰', busy: 1, pay: 1, color: '#8b98a8' };
+  }
+
+  function busyFactor() {
+    let b = dayPeriod().busy;
+    if (holiday) b *= 1.25;
+    if (wx.rain || wx.snow) b *= 1.2;
+    if (wx.wind) b *= 1.1;
+    return b;
+  }
+
+  function clockText() {
+    const hh = Math.floor(gameMin / 60) % 24;
+    const mm = Math.floor(gameMin % 60);
+    return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
+  }
+
   function newOrder() {
     const pool = buildings.filter((b) => b.type === 'build');
     let from = null, to = null;
@@ -804,9 +831,12 @@
       Math.hypot(from.door.x - to.door.x, from.door.y - to.door.y);
 
     const diff = clamp(1 - 0.011 * ordersDone, 0.78, 1);
-    const timeLimit = clamp(route / 190 + 28, 35, 90) * diff;
+    const busy = busyFactor();
+    const period = dayPeriod();
+    const timeLimit = clamp(route / 190 + 28, 35, 90) * diff + (busy - 1) * 7;
     const centerDist = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
     let base = 6 + Math.round(centerDist / 110);
+    base = Math.round(base * period.pay * (holiday ? 1.12 : 1));
     if (junk) base = Math.max(3, Math.round(base * 0.55));
 
     const o = {
@@ -913,11 +943,18 @@
 
   function arriveShop() {
     order.state = 'waiting';
-    order.wait = clamp(2.8 + ordersDone * 0.12 + ((wx.rain || wx.snow) ? 2.2 : 0) + rand(0, 2.4), 2.6, 11);
+    const p = dayPeriod();
+    const b = busyFactor();
+    order.wait = clamp((1.9 + ordersDone * 0.08) * b + rand(0, 1.6), 1.6, 20);
     order.waitMax = order.wait;
     sfx('bell');
     ring(order.pickup.x, order.pickup.y, '#ff9f43');
-    addText(order.pickup.x, order.pickup.y - 44, '到店 · 等出餐', '#ffd8a8');
+    if (b >= 1.7) {
+      addText(order.pickup.x, order.pickup.y - 44, p.name + ' · 商家忙不过来', p.color, 1.05);
+      addText(order.pickup.x, order.pickup.y - 70, '预计等 ' + Math.ceil(order.wait) + ' 秒', '#ffd8a8', 0.85, 0.35);
+    } else {
+      addText(order.pickup.x, order.pickup.y - 44, '到店 · 等出餐', '#ffd8a8');
+    }
   }
 
   function pickedUp() {
@@ -1068,7 +1105,7 @@
     mood = clamp(mood - 14, 0, 100);
     shake(13);
     sfx('fail');
-    const why = order.state === 'waiting' ? '卡餐 · 超时' : '超时 · 差评';
+    const why = order.state === 'waiting' ? '等餐超时 · 差评' : '配送超时 · 差评';
     addText(player.x, player.y - 48, why, '#ff6b6b', 1.5);
     if (lives <= 0) gameOver();
     else newOrder();
@@ -1730,7 +1767,13 @@
   }
 
   function updateNight() {
-    night = clamp((elapsed - 80) / 100, 0, 1);
+    const h = gameMin / 60;
+    let v;
+    if (h >= 17.5 && h < 19.5) v = (h - 17.5) / 2;
+    else if (h >= 19.5 || h < 5.5) v = 1;
+    else if (h >= 5 && h < 7) v = 1 - (h - 5) / 2;
+    else v = 0;
+    night = clamp(v, 0, 1);
   }
 
   function updateOrder(dt) {
@@ -1824,6 +1867,7 @@
     clock += dt;
     if (state === 'playing') {
       elapsed += dt;
+      gameMin = (gameMin + dt * CLOCK_SPEED) % 1440;
       updateNight();
       updateWind(dt);
       updateHeat(dt);
@@ -1938,6 +1982,26 @@
         else rr(c.x + 5, c.y + 4 + k * 8, c.w - 10, 6, 3);
         ctx.fill();
       }
+
+      // 「施工绕道」指示牌
+      const sx = horiz ? c.x + c.w / 2 : c.x - 48;
+      const sy = horiz ? c.y - 34 : c.y + c.h / 2;
+      ctx.fillStyle = '#6b7280';
+      ctx.fillRect(sx - 1.5, sy + 14, 3, 20);
+      ctx.fillStyle = '#f8d34a';
+      rr(sx - 38, sy - 17, 76, 34, 6);
+      ctx.fill();
+      ctx.strokeStyle = '#8a5a00';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#3a2a00';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '800 14px ' + FONT;
+      ctx.fillText('施工绕道', sx, sy - 5);
+      ctx.font = '700 8.5px ' + FONT;
+      ctx.fillText('前方封闭', sx, sy + 9);
+      ctx.textBaseline = 'alphabetic';
     }
   }
 
@@ -1984,6 +2048,23 @@
     ctx.stroke();
     ctx.restore();
     sprintBtn = { x: bx - r - 8 * UI, y: by - r - 8 * UI, w: r * 2 + 16 * UI, h: r * 2 + 16 * UI };
+
+    // 营业时间 + 时段
+    const per = dayPeriod();
+    const txt = clockText() + ' · ' + per.name + (holiday ? ' · 节假日' : '');
+    ctx.font = '800 ' + (12 * UI).toFixed(1) + 'px ' + FONT;
+    const tw2 = ctx.measureText(txt).width + 22 * UI;
+    ctx.fillStyle = 'rgba(10,14,20,0.72)';
+    rr(W - 12 * UI - tw2, 92 * UI, tw2, 24 * UI, 12 * UI);
+    ctx.fill();
+    ctx.strokeStyle = hexA(per.color, 0.5);
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+    ctx.fillStyle = per.color;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(txt, W - 23 * UI, 104 * UI);
+    ctx.textBaseline = 'alphabetic';
 
     // 爆单选单
     if (rush) {
@@ -3320,6 +3401,9 @@
     mood = 100; breakdownT = 0;
     bikeDown = 0; heatT = 0; gustT = 0; gustPower = 0;
     night = 0; elapsed = 0; lastLCol = '';
+    gameMin = 10 * 60 + 30;
+    const wd = new Date().getDay();
+    holiday = (wd === 0 || wd === 6) || Math.random() < 0.18;
     ev = { next: 14, dog: null };
 
     player.x = START.x;
