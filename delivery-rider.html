@@ -32,6 +32,7 @@
     backdrop-filter:blur(6px);transition:background .15s,transform .12s;
   }
   .mute:hover{background:rgba(30,36,48,.85);transform:translateY(-1px)}
+  .pause{right:60px}
 
   .overlay{
     position:absolute;inset:0;z-index:10;
@@ -114,6 +115,31 @@
   .stat.bad span{color:#ff8787}
   .stat small{display:block;margin-top:4px;font-size:11.5px;color:#8b98a8}
 
+  .shop-row{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:8px;
+    background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:12px;
+    text-align:left;
+  }
+  .shop-row .ico{font-size:20px;width:26px;text-align:center}
+  .shop-row .info{flex:1;min-width:0}
+  .shop-row .name{font-size:13.5px;font-weight:700;color:#e8edf5}
+  .shop-row .desc{font-size:11.5px;color:#8b98a8;margin-top:2px;line-height:1.5}
+  .shop-row button{
+    flex:none;padding:8px 12px;border:0;border-radius:9px;cursor:pointer;
+    font-family:inherit;font-size:12px;font-weight:700;color:#20140a;
+    background:linear-gradient(180deg,#ffd166,#f2b53a);
+  }
+  .shop-row button:disabled{background:rgba(255,255,255,.1);color:#6f7b8c;cursor:default}
+  .coin-bar{
+    display:flex;justify-content:space-between;align-items:center;
+    margin:0 0 14px;padding:10px 14px;border-radius:12px;
+    background:rgba(255,209,102,.1);border:1px solid rgba(255,209,102,.25);
+    font-size:13px;color:#ffd166;
+  }
+  .goal{display:flex;justify-content:space-between;font-size:12.5px;color:#c3ccd9;padding:4px 2px}
+  .goal b{color:#8ce99a;font-weight:600}
+  .goal.done b{color:#ffd166}
+
   .epilogue{
     margin:16px 0 20px;padding:13px 15px;
     font-size:13.5px;line-height:1.95;color:#aab6c6;text-align:left;
@@ -127,6 +153,7 @@
 <div id="game">
   <canvas id="cv"></canvas>
   <button id="btnMute" class="mute" title="静音 (M)">🔊</button>
+  <button id="btnPause" class="mute pause" title="暂停 (P)">⏸</button>
 
   <div id="screenMenu" class="overlay show">
     <div class="card">
@@ -134,16 +161,18 @@
       <h1>极速外卖</h1>
       <div class="sub">骑手日记</div>
       <ul class="rules">
-        <li><b>WASD</b> / <b>方向键</b> 骑行，手机上直接拖拽屏幕</li>
-        <li>路面上的 <b>绿箭头</b> 才是能走的方向，红灯路口有车横穿</li>
-        <li>路口有 <b>读秒</b>：绿灯剩几秒、红灯还等几秒都写在路上</li>
-        <li>只有一半路口装了灯，没灯的路口直接过，但照样有车横穿</li>
-        <li>雨天、雪天、大风、夜里，都会让你更慢、更滑、更看不清</li>
-        <li>电瓶会没电，没电只能推；车还会在最忙的时候抛锚</li>
-        <li>系统会派 <span class="warn">垃圾单</span>，拒单要罚款；催单、卡餐、差评都在扣你的情绪</li>
+        <li><b>WASD</b> / <b>方向键</b> 骑行；手机按住<b>屏幕左半边</b>拖动</li>
+        <li>一个路口<b>一盏红绿灯</b>，灯下方的箭头指示哪个方向能走</li>
+        <li>灯箱上方是<b>读秒</b>；只有三分之一的路口装了灯</li>
+        <li>顾客会<b>发消息催单</b>，偶尔让你<b>顺路带东西</b>（有小费，也可以不带）</li>
+        <li>连续送达攒<b>冲刺</b>，满了点右下角冲一段；每 3 单来一次<b>爆单</b>让你挑单</li>
+        <li>路上有<b>封路施工</b>和<b>交警查车</b>，闯红灯被交警抓到罚款翻倍</li>
+        <li>雨天、雪天、大风、夜里更慢更滑；电瓶会没电，车还会抛锚</li>
       </ul>
       <button id="btnStart" class="primary">开始接单</button>
+      <button id="btnShop" style="margin-top:10px;width:100%;padding:13px;border:0;border-radius:12px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:700;color:#ffd166;background:rgba(255,209,102,.12);border:1px solid rgba(255,209,102,.28)">🔧 改装店 · 余额 <span id="menuCoins">¥0</span></button>
       <div class="foot">按 <kbd>Enter</kbd> 开始 · <kbd>E</kbd> 催单/接电话/踹车 · <kbd>P</kbd> 暂停 · <kbd>M</kbd> 静音</div>
+      <div id="menuBest" style="margin-top:12px;font-size:11.5px;color:#8b98a8;letter-spacing:.3px"></div>
       <div class="foot install-tip">手机上用浏览器菜单选择「添加到主屏幕」，还能全屏当 App 玩</div>
     </div>
   </div>
@@ -163,6 +192,17 @@
       <div class="epilogue" id="oEpilogue"></div>
       <button id="btnAgain" class="primary">再来一单</button>
       <div class="foot">按 <kbd>Enter</kbd> 重新开始</div>
+    </div>
+  </div>
+
+  <div id="screenShop" class="overlay">
+    <div class="card">
+      <div class="kicker">骑手改装店</div>
+      <h2>升级你的装备</h2>
+      <div class="coin-bar"><span>我的余额</span><b id="shopCoins">¥0</b></div>
+      <div id="shopList"></div>
+      <div id="shopGoals" style="margin-top:14px"></div>
+      <button id="btnShopBack" class="primary" style="margin-top:16px">返回</button>
     </div>
   </div>
 
@@ -315,6 +355,83 @@
   let order = null;
   let cars = [];
   let peds = [];
+  let closures = [];
+  let police = [];
+  let sprint = 0, sprintT = 0;
+  let rush = null;
+
+  /* ========== 存档 / 改装 / 每日目标 ========== */
+  const SAVE_KEY = 'jsw_save_v1';
+  const UP_DEF = [
+    { id: 'bat', ico: '🔋', name: '大容量电瓶', desc: '电瓶更耐用（每级 -15% 耗电）', max: 3 },
+    { id: 'rain', ico: '🧥', name: '防水雨衣', desc: '雨雪天更稳（每级 +25% 抓地）', max: 3 },
+    { id: 'box', ico: '🍱', name: '保温餐箱', desc: '小费更高（每级 +10%）', max: 3 },
+    { id: 'bike', ico: '🛵', name: '改装电机', desc: '极速更快（每级 +4%）', max: 3 }
+  ];
+  const GOALS = [
+    { id: 'orders', text: '今日完成 5 单', target: 5, reward: 30 },
+    { id: 'money', text: '今日收入 ¥200', target: 200, reward: 30 },
+    { id: 'combo', text: '最高连击 5 单', target: 5, reward: 30 }
+  ];
+  let save = null;
+
+  function upCost(lv) { return [60, 130, 260][lv] || 99999; }
+
+  function defaultSave() {
+    return {
+      coins: 0,
+      up: { bat: 0, rain: 0, box: 0, bike: 0 },
+      best: { money: 0, orders: 0, combo: 0 },
+      goals: { date: '', orders: 0, money: 0, combo: 0, claimed: {} }
+    };
+  }
+
+  function loadSave() {
+    let j = null;
+    try { const raw = localStorage.getItem(SAVE_KEY); if (raw) j = JSON.parse(raw); } catch (e) { j = null; }
+    const d = defaultSave();
+    if (j && typeof j === 'object') {
+      d.coins = Math.max(0, Number(j.coins) || 0);
+      for (const k in d.up) d.up[k] = clamp(Number(j.up && j.up[k]) || 0, 0, 3);
+      for (const k in d.best) d.best[k] = Number(j.best && j.best[k]) || 0;
+      if (j.goals) {
+        for (const k in d.goals) if (k !== 'date' && k !== 'claimed') d.goals[k] = Number(j.goals[k]) || 0;
+        if (j.goals.claimed) d.goals.claimed = j.goals.claimed;
+      }
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (d.goals.date !== today) d.goals = { date: today, orders: 0, money: 0, combo: 0, claimed: {} };
+    save = d;
+  }
+
+  function persist() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (e) { /* noop */ }
+  }
+
+  let upBat = 1, upRain = 1, upBox = 1, upBike = 1;
+  function applyUpgrades() {
+    if (!save) loadSave();
+    upBat = 1 - 0.15 * save.up.bat;
+    upRain = 1 + 0.25 * save.up.rain;
+    upBox = 1 + 0.10 * save.up.box;
+    upBike = 1 + 0.04 * save.up.bike;
+  }
+
+  function checkGoals() {
+    if (!save) return;
+    for (let i = 0; i < GOALS.length; i++) {
+      const g = GOALS[i];
+      if (save.goals.claimed[g.id]) continue;
+      const cur = g.id === 'combo' ? Math.max(save.goals.combo, bestCombo) : (save.goals[g.id] || 0);
+      if (cur >= g.target) {
+        save.goals.claimed[g.id] = true;
+        save.coins += g.reward;
+        addText(player.x, player.y - 96, '目标达成 · 余额 +¥' + g.reward, '#ffd166', 1.0, 0.3);
+        sfx('bell');
+      }
+    }
+    persist();
+  }
   let particles = [], texts = [], rings = [];
   let clock = 0, elapsed = 0, hintT = 0, bannerT = 0, bannerText = '';
   let shakeT = 0, shakeDur = 1, shakeMag = 0;
@@ -322,6 +439,8 @@
   let hurryCd = 0;
   let actionBtn = null, rejectBtn = null;
   let msgButtons = [];
+  let rushButtons = [];
+  let sprintBtn = null;
   let flashT = 0;
   let ev = { next: 14, dog: null };
 
@@ -654,7 +773,7 @@
     let base = 6 + Math.round(centerDist / 110);
     if (junk) base = Math.max(3, Math.round(base * 0.55));
 
-    order = {
+    const o = {
       from, to,
       pickup: from.door,
       drop: to.door,
@@ -674,6 +793,74 @@
       sfx('hang');
       addText(player.x, player.y - 60, '系统派了一单垃圾单', '#ff8787', 0.95);
     }
+    order = o;
+    return o;
+  }
+
+  /* ---------- 爆单：一次给两单让你挑 ---------- */
+  function startRush() {
+    order = null;
+    const a = newOrder();
+    const b = newOrder();
+    order = null;
+    rush = { options: [a, b], t: 14 };
+    sfx('call');
+    banner('爆单了 · 挑一单接');
+  }
+
+  function pickRush(i) {
+    if (!rush) return;
+    const o = rush.options[i] || rush.options[0];
+    rush = null;
+    order = o;
+    sfx('pickup');
+  }
+
+  /* ---------- 封路 ---------- */
+  function buildClosures() {
+    closures = [];
+    for (let k = 0; k < 2; k++) {
+      for (let tries = 0; tries < 40; tries++) {
+        const horiz = Math.random() < 0.5;
+        const ri = randInt(1, 4);
+        const seg = randInt(0, COLS - 1);
+        let x, y, w, h;
+        if (horiz) {
+          const y0 = YS[ri], a0 = XS[seg] + 60, a1 = XS[seg + 1] - 60;
+          if (a1 - a0 < 50) continue;
+          x = rand(a0, a1); y = y0; w = 34; h = 88;
+        } else {
+          const x0 = XS[ri], b0 = YS[seg] + 60, b1 = YS[seg + 1] - 60;
+          if (b1 - b0 < 50) continue;
+          x = x0; y = rand(b0, b1); w = 88; h = 34;
+        }
+        if (Math.hypot(x - START.x, y - START.y) < 340) continue;
+        let clash = false;
+        for (let m = 0; m < closures.length; m++) {
+          if (Math.hypot(closures[m].x + closures[m].w / 2 - x, closures[m].y + closures[m].h / 2 - y) < 260) clash = true;
+        }
+        if (clash) continue;
+        closures.push({ x: x - w / 2, y: y - h / 2, w, h });
+        break;
+      }
+    }
+  }
+
+  /* ---------- 交警 ---------- */
+  function buildPolice() {
+    police = [];
+    const sig = [];
+    for (let j = 0; j <= ROWS; j++) {
+      for (let i = 0; i <= COLS; i++) if (isSignal(i, j)) sig.push([i, j]);
+    }
+    sig.sort((a, b) =>
+      Math.hypot(XS[b[0]] - START.x, YS[b[1]] - START.y) - Math.hypot(XS[a[0]] - START.x, YS[a[1]] - START.y));
+    police = sig.slice(0, 2).map((q) => ({ i: q[0], j: q[1] }));
+  }
+
+  function hasPolice(i, j) {
+    for (let k = 0; k < police.length; k++) if (police[k].i === i && police[k].j === j) return true;
+    return false;
   }
 
   function rejectOrder() {
@@ -796,7 +983,7 @@
 
   function deliver() {
     const ratio = clamp(order.timeLeft / order.timeLimit, 0, 1);
-    let tip = Math.round(order.base * 0.65 * ratio);
+    let tip = Math.round(order.base * 0.65 * ratio * upBox);
     if (order.annoy > 0) tip = Math.round(tip * clamp(1 - 0.25 * order.annoy, 0.25, 1));
     combo++;
     if (combo > bestCombo) bestCombo = combo;
@@ -815,6 +1002,13 @@
 
     money += total;
     ordersDone++;
+    sprint = Math.min(100, sprint + 18);
+    if (save) {
+      save.goals.orders++;
+      save.goals.money += total;
+      save.goals.combo = Math.max(save.goals.combo, combo);
+      checkGoals();
+    }
     if (order.annoy >= 2) complaints++;
     mood = clamp(mood + 7, 0, 100);
 
@@ -828,7 +1022,8 @@
 
     maybeAddCar();
     updateWeather();
-    newOrder();
+    if (ordersDone % 3 === 0) startRush();
+    else newOrder();
   }
 
   function failOrder() {
@@ -990,6 +1185,10 @@
       case 'fine': tone(660, 0.08, 'square', 0.05); tone(440, 0.14, 'square', 0.05, 0, 0.08); break;
       case 'dead': tone(220, 0.3, 'sawtooth', 0.06, 0.5); break;
       case 'wind': tone(300, 0.4, 'sawtooth', 0.03, 0.7); break;
+      case 'boost':
+        tone(420, 0.16, 'sawtooth', 0.06, 0.6);
+        tone(760, 0.22, 'triangle', 0.05, 0.4, 0.05);
+        break;
       case 'yelp':
         tone(880, 0.07, 'square', 0.07);
         tone(620, 0.11, 'square', 0.05, 0.7, 0.07);
@@ -1024,6 +1223,15 @@
     return { x, y };
   }
 
+  function trySprint() {
+    if (state !== 'playing' || sprint < 100 || sprintT > 0) return;
+    sprint = 0;
+    sprintT = 3;
+    sfx('boost');
+    ring(player.x, player.y, '#ffd166');
+    addText(player.x, player.y - 52, '冲刺！', '#ffd166', 1.2);
+  }
+
   function doAction() {
     if (state !== 'playing' || !order) return;
     if (bikeDown > 0) { kickBike(); return; }
@@ -1039,6 +1247,8 @@
 
     if (k === 'enter') {
       if (state === 'menu' || state === 'over') startGame();
+    } else if (k === ' ') {
+      trySprint();
     } else if (k === 'e') {
       doAction();
     } else if (k === 'p' || k === 'escape') {
@@ -1073,9 +1283,15 @@
     if (hitBox(actionBtn, e.clientX, e.clientY)) { doAction(); e.preventDefault(); return; }
     if (hitBox(rejectBtn, e.clientX, e.clientY)) { rejectOrder(); e.preventDefault(); return; }
 
-    const j = joyCenter();
-    if (Math.hypot(e.clientX - j.x, e.clientY - j.y) <= j.r) {
-      stick = { id: e.pointerId, ox: j.x, oy: j.y, x: e.clientX, y: e.clientY };
+    if (sprintBtn && hitBox(sprintBtn, e.clientX, e.clientY)) { trySprint(); e.preventDefault(); return; }
+    for (let i = 0; i < rushButtons.length; i++) {
+      const rb = rushButtons[i];
+      if (hitBox(rb, e.clientX, e.clientY)) { pickRush(rb.idx); e.preventDefault(); return; }
+    }
+
+    // 手机左半屏是固定移动区：按在哪里，摇杆就出现在哪里
+    if (e.clientX < W * 0.55) {
+      stick = { id: e.pointerId, ox: e.clientX, oy: e.clientY, x: e.clientX, y: e.clientY };
       try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* noop */ }
     }
     e.preventDefault();
@@ -1161,11 +1377,16 @@
     }
     if (heatT > 0) { ix *= 0.7; iy *= 0.7; }
 
-    let maxV = MAXV * wx.speed * (W < 660 ? 0.88 : 1);
+    if (sprintT > 0) {
+      sprintT -= dt;
+      player.invuln = Math.max(player.invuln, 0.12);
+    }
+    let maxV = MAXV * wx.speed * (W < 660 ? 0.88 : 1) * upBike;
+    if (sprintT > 0) maxV *= 1.45;
     if (pushing) maxV = Math.min(maxV, PUSH_V);
     if (mood < 25) maxV *= 0.93;
 
-    const grip = wx.grip * (mood < 25 ? 0.9 : 1);
+    const grip = clamp(wx.grip * (mood < 25 ? 0.9 : 1) * upRain, 0.4, 1);
     const k = 1 - Math.exp(-(10 * grip) * dt);
     player.vx = lerp(player.vx, ix * maxV, k);
     player.vy = lerp(player.vy, iy * maxV, k);
@@ -1183,6 +1404,7 @@
     player.y = clamp(player.y, PR + 2, WORLD_H - PR - 2);
 
     for (let i = 0; i < buildings.length; i++) resolveCircleRect(player, buildings[i].g);
+    for (let i = 0; i < closures.length; i++) resolveCircleRect(player, closures[i]);
 
     const sp = Math.hypot(player.vx, player.vy);
     if (sp > 18) {
@@ -1202,7 +1424,7 @@
 
     // 电量消耗
     if (!pushing) {
-      battery -= (0.12 + (sp / MAXV) * 0.40) * dt;
+      battery -= (0.12 + (sp / MAXV) * 0.40) * upBat * dt;
       if (battery <= 0) {
         battery = 0;
         pushing = true;
@@ -1312,6 +1534,16 @@
 
     violations++;
     mood = clamp(mood - 3, 0, 100);
+    if (hasPolice(ci, cj)) {
+      const f = 20;
+      fines += f;
+      money = Math.max(0, money - f);
+      player.stun = 0.45;
+      shake(10);
+      sfx('fine');
+      addText(player.x, player.y - 50, '交警：靠边停车 · 罚款 ¥' + f, '#ff6b6b', 1.2);
+      return;
+    }
     if (Math.random() < 0.18) {
       const f = 10;
       fines += f;
@@ -1550,6 +1782,7 @@
       updatePlayer(dt);
       updateCars(dt);
       updatePeds(dt);
+      if (rush) { rush.t -= dt; if (rush.t <= 0) pickRush(0); }
       checkCarHits();
       checkLights();
       updateOrder(dt);
@@ -1610,6 +1843,113 @@
     ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 6;
     ctx.strokeRect(-3, -3, WORLD_W + 6, WORLD_H + 6);
+  }
+
+  function drawClosures() {
+    for (let i = 0; i < closures.length; i++) {
+      const c = closures[i];
+      const horiz = c.w > c.h;
+      ctx.fillStyle = 'rgba(255,214,102,0.14)';
+      rr(c.x, c.y, c.w, c.h, 6);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,214,102,0.5)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 6]);
+      rr(c.x, c.y, c.w, c.h, 6);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const cnt = 4;
+      for (let k = 0; k < cnt; k++) {
+        ctx.fillStyle = k % 2 ? '#e8edf5' : '#ff6b6b';
+        if (horiz) rr(c.x + 4 + k * 8, c.y + 5, 6, c.h - 10, 3);
+        else rr(c.x + 5, c.y + 4 + k * 8, c.w - 10, 6, 3);
+        ctx.fill();
+      }
+    }
+  }
+
+  function drawPoliceMan(x, y) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.beginPath(); ctx.ellipse(0, 6, 8, 4, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#2b4a8f';
+    rr(-5, -6, 10, 13, 5); ctx.fill();
+    ctx.fillStyle = '#f2d3a8';
+    ctx.beginPath(); ctx.arc(0, -10, 4.6, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1f3a72';
+    ctx.beginPath(); ctx.arc(0, -11.5, 5.2, Math.PI, TAU); ctx.fill();
+    ctx.fillStyle = '#ffd43b';
+    ctx.beginPath(); ctx.arc(0, -13.5, 1.6, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  function drawExtraHUD() {
+    sprintBtn = null;
+    rushButtons = [];
+    if (state !== 'playing') return;
+
+    // 冲刺按钮 / 充能环
+    const bx = W - 64 * UI, by = H - 200 * UI, r = 30 * UI;
+    const ready = sprint >= 100 && sprintT <= 0;
+    ctx.save();
+    ctx.fillStyle = ready ? 'rgba(255,209,102,0.92)' : 'rgba(255,255,255,0.09)';
+    ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = ready ? 'rgba(255,255,255,0.75)' : 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = ready ? '#20140a' : '#9aa4b2';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '800 ' + (12 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText(sprintT > 0 ? '冲刺中' : '冲刺', bx, by + 1);
+    ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = ready ? 'rgba(255,235,160,0.95)' : 'rgba(255,209,102,0.6)';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(bx, by, r + 7 * UI, -Math.PI / 2, -Math.PI / 2 + TAU * clamp(sprint / 100, 0, 1));
+    ctx.stroke();
+    ctx.restore();
+    sprintBtn = { x: bx - r - 8 * UI, y: by - r - 8 * UI, w: r * 2 + 16 * UI, h: r * 2 + 16 * UI };
+
+    // 爆单选单
+    if (rush) {
+      const cnt = rush.options.length;
+      const cw2 = Math.min(152 * UI, (W - 48 * UI) / cnt - 8);
+      const chh = 96 * UI;
+      const total = cw2 * cnt + 10 * UI * (cnt - 1);
+      const x0 = W / 2 - total / 2;
+      const y0 = H - 250 * UI;
+      ctx.fillStyle = '#ffd166';
+      ctx.textAlign = 'center';
+      ctx.font = '800 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('爆单了 · 选一单  ' + Math.ceil(rush.t) + 's', W / 2, y0 - 14 * UI);
+      for (let i = 0; i < cnt; i++) {
+        const o = rush.options[i];
+        const px2 = x0 + i * (cw2 + 10 * UI);
+        const dd = Math.round(Math.hypot(player.x - o.pickup.x, player.y - o.pickup.y) / 9);
+        ctx.fillStyle = 'rgba(18,26,40,0.95)';
+        rr(px2, y0, cw2, chh, 12 * UI); ctx.fill();
+        ctx.strokeStyle = o.junk ? 'rgba(255,107,107,0.75)' : 'rgba(140,233,154,0.6)';
+        ctx.lineWidth = 1.6; ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.fillStyle = o.junk ? '#ff8787' : '#8ce99a';
+        ctx.font = '800 ' + (17 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText('¥' + o.base, px2 + cw2 / 2, y0 + 26 * UI);
+        ctx.fillStyle = '#c3ccd9';
+        ctx.font = '600 ' + (11.5 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText(dd + ' 米', px2 + cw2 / 2, y0 + 47 * UI);
+        ctx.fillStyle = o.junk ? '#ff8787' : '#9aa4b2';
+        ctx.font = '600 ' + (10.5 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText(o.junk ? '垃圾单' : '正常单', px2 + cw2 / 2, y0 + 65 * UI);
+        ctx.fillStyle = 'rgba(255,140,66,0.92)';
+        rr(px2 + 10 * UI, y0 + chh - 28 * UI, cw2 - 20 * UI, 19 * UI, 9 * UI); ctx.fill();
+        ctx.fillStyle = '#20140a';
+        ctx.font = '800 ' + (11.5 * UI).toFixed(1) + 'px ' + FONT;
+        ctx.fillText('接这单', px2 + cw2 / 2, y0 + chh - 16 * UI);
+        rushButtons.push({ x: px2, y: y0, w: cw2, h: chh, idx: i });
+      }
+    }
   }
 
   function drawProps() {
@@ -1832,6 +2172,7 @@
 
         // 灯柱放在路口一角
         drawSignal(cx - 58, cy - 58, isH, col, num, near);
+        if (hasPolice(i, j)) drawPoliceMan(cx - 30, cy - 58);
       }
     }
     ctx.globalAlpha = 1;
@@ -2424,12 +2765,19 @@
     ctx.textAlign = 'left';
     ctx.fillText(label, cx0 + 38 * UI, cy0 + 29 * UI);
 
+    const face = order.annoy >= 2 ? '😠' : order.annoy >= 1 ? '😐' : '😊';
+    const faceWord = order.annoy >= 2 ? '快炸了' : order.annoy >= 1 ? '有点急' : '心情不错';
+    const lw = ctx.measureText(label).width;
+    ctx.fillStyle = order.annoy >= 2 ? '#ff8787' : order.annoy >= 1 ? '#ffd166' : '#8ce99a';
+    ctx.font = '700 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
+    ctx.fillText(face, cx0 + 38 * UI + lw + 8 * UI, cy0 + 29 * UI);
+
     const tgt = orderTarget();
     const meters = Math.max(1, Math.round(Math.hypot(player.x - tgt.x, player.y - tgt.y) / 9));
     ctx.textAlign = 'right';
     ctx.fillStyle = '#9aa4b2';
     ctx.font = '600 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
-    ctx.fillText((order.state === 'waiting' || bikeDown > 0) ? '' : meters + ' 米', cx0 + cw - 18 * UI, cy0 + 29 * UI);
+    ctx.fillText((order.state === 'waiting' || bikeDown > 0) ? '' : faceWord + ' · ' + meters + ' 米', cx0 + cw - 18 * UI, cy0 + 29 * UI);
 
     const bx = cx0 + 18 * UI, by = cy0 + 44 * UI;
     const bwid = cw - 36 * UI, bh = 8 * UI;
@@ -2713,7 +3061,9 @@
   function drawStick() {
     if (state !== 'playing') return;
     const j = joyCenter();
-    const bx = j.x, by = j.y, r = 78 * UI;
+    const bx = stick ? stick.ox : j.x;
+    const by = stick ? stick.oy : j.y;
+    const r = 78 * UI;
 
     if (TOUCH || stick) {
       ctx.save();
@@ -2775,6 +3125,7 @@
     drawGround();
     drawBlocks();
     drawProps();
+    drawClosures();
     drawLights();
     drawGuide();
     drawGoals();
@@ -2791,6 +3142,7 @@
     drawWeather();
     drawNight();
     if (state === 'playing' || state === 'paused' || state === 'over') drawHUD();
+    drawExtraHUD();
     drawOffscreenArrow();
     drawBanner();
     drawStick();
@@ -2814,6 +3166,8 @@
     elMenu.classList.remove('show');
     elOver.classList.remove('show');
     elPause.classList.remove('show');
+    const sh = document.getElementById('screenShop');
+    if (sh) sh.classList.remove('show');
   }
 
   function startGame() {
@@ -2844,6 +3198,12 @@
 
     const r = Math.random();
     setWeather(r < 0.42 ? 'clear' : r < 0.58 ? 'heat' : r < 0.76 ? 'rain' : r < 0.9 ? 'snow' : 'wind', true);
+
+    loadSave();
+    applyUpgrades();
+    sprint = 0; sprintT = 0; rush = null;
+    buildClosures();
+    buildPolice();
 
     spawnCars(9);
     spawnPeds(12);
@@ -2895,6 +3255,16 @@
     stick = null;
     sfx('over');
 
+    if (!save) loadSave();
+    save.coins += money;
+    if (money > save.best.money) save.best.money = money;
+    if (ordersDone > save.best.orders) save.best.orders = ordersDone;
+    if (bestCombo > save.best.combo) save.best.combo = bestCombo;
+    save.goals.money += money;
+    save.goals.combo = Math.max(save.goals.combo, bestCombo);
+    checkGoals();
+    persist();
+
     const rank = money >= 320 ? '金牌骑手' : money >= 180 ? '熟练骑手' : money >= 80 ? '新手骑手' : '路痴骑手';
     elRank.textContent = rank;
     elMoney.textContent = '¥' + money;
@@ -2911,6 +3281,89 @@
   }
 
   btnMute.addEventListener('click', function (e) { e.stopPropagation(); toggleMute(); });
+
+  const btnPause = document.getElementById('btnPause');
+  if (btnPause) btnPause.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (state === 'playing') pauseGame();
+    else if (state === 'paused') resumeGame();
+  });
+
+  /* ---------- 改装店 ---------- */
+  const elShop = document.getElementById('screenShop');
+  function renderShop() {
+    if (!save) loadSave();
+    const coinsEl = document.getElementById('shopCoins');
+    if (coinsEl) coinsEl.textContent = '¥' + save.coins;
+    const list = document.getElementById('shopList');
+    let html = '';
+    for (let i = 0; i < UP_DEF.length; i++) {
+      const u = UP_DEF[i], lv = save.up[u.id], maxed = lv >= u.max, cost = upCost(lv);
+      const can = !maxed && save.coins >= cost;
+      html += '<div class="shop-row"><div class="ico">' + u.ico + '</div><div class="info">' +
+        '<div class="name">' + u.name + ' · Lv.' + lv + '</div><div class="desc">' + u.desc + '</div></div>' +
+        '<button data-up="' + u.id + '"' + (can ? '' : ' disabled') + '>' + (maxed ? '满级' : '¥' + cost) + '</button></div>';
+    }
+    list.innerHTML = html;
+    const btns = list.querySelectorAll('button[data-up]');
+    for (let i = 0; i < btns.length; i++) {
+      btns[i].addEventListener('click', function () { buyUpgrade(this.getAttribute('data-up')); });
+    }
+    const gl = document.getElementById('shopGoals');
+    let g = '<div style="font-size:12px;color:#8b98a8;margin-bottom:6px">今日目标</div>';
+    for (let i = 0; i < GOALS.length; i++) {
+      const t = GOALS[i];
+      const cur = save.goals[t.id] || 0;
+      const done = !!save.goals.claimed[t.id] || cur >= t.target;
+      g += '<div class="goal' + (done ? ' done' : '') + '"><span>' + t.text + '</span><b>' +
+        (done ? '已完成 +¥' + t.reward : Math.min(cur, t.target) + '/' + t.target) + '</b></div>';
+    }
+    gl.innerHTML = g;
+  }
+
+  function buyUpgrade(id) {
+    if (!save) loadSave();
+    const u = UP_DEF.find(function (x) { return x.id === id; });
+    if (!u) return;
+    const lv = save.up[id];
+    if (lv >= u.max || save.coins < upCost(lv)) return;
+    save.coins -= upCost(lv);
+    save.up[id] = lv + 1;
+    applyUpgrades();
+    persist();
+    renderShop();
+    sfx('bell');
+  }
+
+  function openShop() {
+    loadSave();
+    renderShop();
+    hideAll();
+    if (elShop) elShop.classList.add('show');
+    state = 'shop';
+  }
+
+  const btnShop = document.getElementById('btnShop');
+  if (btnShop) btnShop.addEventListener('click', function (e) { e.stopPropagation(); openShop(); });
+  const btnShopBack = document.getElementById('btnShopBack');
+  if (btnShopBack) btnShopBack.addEventListener('click', function (e) {
+    e.stopPropagation();
+    if (elShop) elShop.classList.remove('show');
+    elMenu.classList.add('show');
+    state = 'menu';
+    updateMenuCoins();
+  });
+
+  function updateMenuCoins() {
+    if (!save) loadSave();
+    const c = document.getElementById('menuCoins');
+    if (c) c.textContent = '¥' + save.coins;
+    const b = document.getElementById('menuBest');
+    if (b) {
+      b.innerHTML = '最佳记录 · 收入 ¥' + save.best.money +
+        ' · 完成 ' + save.best.orders + ' 单 · 连击 ' + save.best.combo;
+    }
+  }
   document.getElementById('btnStart').addEventListener('click', startGame);
   document.getElementById('btnAgain').addEventListener('click', startGame);
   document.getElementById('btnResume').addEventListener('click', resumeGame);
@@ -2932,9 +3385,14 @@
     requestAnimationFrame(frame);
   }
 
+  loadSave();
+  applyUpgrades();
+  updateMenuCoins();
   resize();
   buildCity();
   addProps();
+  buildClosures();
+  buildPolice();
   player.x = START.x;
   player.y = START.y;
   cam.x = player.x;
