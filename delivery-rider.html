@@ -258,10 +258,10 @@
   const LANE_MID = 33;    // 小路车道中心
   const LANE_IN = 16;     // 大路内侧车道
   const LANE_OUT = 48;    // 大路外侧车道
-  const LIGHT_PERIOD = 20;        // 红绿灯整周期（秒）
-  const G_T = 8.5;                // 绿灯时长（更久，不用老等）
+  const LIGHT_PERIOD = 23;        // 红绿灯整周期（秒）
+  const G_T = 10;                 // 绿灯时长（更久，不用老等）
   const Y_T = 1.0;                // 黄灯时长
-  const V_OFF = 10;               // 南北向相位偏移
+  const V_OFF = 11.5;             // 南北向相位偏移
 
   // 只有三分一路口装了信号灯，且一个路口只有一盏灯
   function isSignal(i, j) { return (i + j) % 3 === 0; }
@@ -362,6 +362,8 @@
   let peds = [];
   let closures = [];
   let police = [];
+  let policePaid = {};
+  let graceHint = false;
   let sprint = 0, sprintT = 0;
   let rush = null;
 
@@ -1566,17 +1568,29 @@
     const info = axisInfo(axis);
     if (info.c !== 'r') return;   // 黄灯也放行，别太苛刻
 
+    // 前两单是新手保护，不记违章
+    if (ordersDone < 2) {
+      if (!graceHint) {
+        graceHint = true;
+        addText(player.x, player.y - 50, '新手保护 · 前两单不记违章', '#8ce99a', 1.0);
+      }
+      return;
+    }
+
     violations++;
     mood = clamp(mood - 3, 0, 100);
     if (hasPolice(ci, cj)) {
-      const f = 20;
-      fines += f;
-      money = Math.max(0, money - f);
-      player.stun = 0.45;
-      shake(10);
-      sfx('fine');
-      addText(player.x, player.y - 50, '交警：靠边停车 · 罚款 ¥' + f, '#ff6b6b', 1.2);
-      return;
+      const key = ci + ',' + cj;
+      if (!policePaid[key]) {
+        policePaid[key] = true;
+        const f = 20;
+        fines += f;
+        money = Math.max(0, money - f);
+        shake(10);
+        sfx('fine');
+        addText(player.x, player.y - 50, '交警查车 · 罚款 ¥' + f, '#ff6b6b', 1.2);
+        return;
+      }
     }
     if (Math.random() < 0.18) {
       const f = 10;
@@ -3325,6 +3339,8 @@
     loadSave();
     applyUpgrades();
     sprint = 0; sprintT = 0; rush = null;
+    policePaid = {};
+    graceHint = false;
     buildClosures();
     buildPolice();
 
