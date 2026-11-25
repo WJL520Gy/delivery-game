@@ -78,6 +78,9 @@
   .rules li::before{content:"";position:absolute;left:0;top:.75em;width:5px;height:5px;border-radius:50%;background:#ff8c42}
   .rules b{color:#fff;font-weight:600}
   .rules .warn{color:#ff8787}
+  .more-rules{margin:-10px 0 18px;text-align:left;color:#aab6c6;font-size:12px}
+  .more-rules summary{cursor:pointer;color:#9aa4b2;padding:4px 2px}
+  .more-rules .rules{margin:8px 0 0;font-size:12px}
 
   .tag{
     display:inline-block;font-style:normal;font-weight:700;font-size:12px;
@@ -161,14 +164,22 @@
       <h1>极速外卖</h1>
       <div class="sub">骑手日记</div>
       <ul class="rules">
-        <li><b>WASD</b> / <b>方向键</b> 骑行；手机按住<b>屏幕左半边</b>拖动</li>
-        <li>一个路口<b>一盏红绿灯</b>，灯下方的箭头指示哪个方向能走</li>
-        <li>灯箱上方是<b>读秒</b>；只有三分之一的路口装了灯</li>
-        <li>顾客会<b>发消息催单</b>，偶尔让你<b>顺路带东西</b>（有小费，也可以不带）</li>
-        <li>连续送达攒<b>冲刺</b>，满了点右下角冲一段；每 3 单来一次<b>爆单</b>让你挑单</li>
-        <li>路上有<b>封路施工</b>和<b>交警查车</b>，闯红灯被交警抓到罚款翻倍</li>
-        <li>雨天、雪天、大风、夜里更慢更滑；电瓶会没电，车还会抛锚</li>
+        <li><b>WASD</b> / <b>方向键</b> 骑行；手机拖动屏幕左半边。目标箭头会带你走街道并绕开施工</li>
+        <li>新订单有 <b>7 秒</b>选择：Enter / E 接单，Q 拒单（扣 ¥8）；超时后系统默认接单</li>
+        <li>橙色目标是取餐，蓝色目标是送达；进入目标圈会自动完成，不用停车按键</li>
+        <li>守灯、避车、避免摔倒可得 <b>¥4 安全奖</b>；冲刺更快，但风险由你承担</li>
       </ul>
+      <details class="more-rules">
+        <summary>查看天气、车辆和其他规则</summary>
+        <ul class="rules">
+          <li>一个路口一盏灯；读秒和“下个路口”提示会帮助你判断路线</li>
+          <li>商家卡餐不会暂停时限；顾客会催单，也可能请你顺路带东西赚小费</li>
+          <li>红灯闯行可能罚款；交警路口处罚更重。撞车、湿滑摔倒会损失时间和情绪</li>
+          <li>雨雪、大风、夜间会影响速度和抓地；电量耗尽要推车，车辆也可能抛锚</li>
+          <li>每 3 单会出现爆单二选一；改装店可用结算收入升级电池、雨衣、餐箱和电机</li>
+          <li>Space / 冲刺按钮可加速；E 催单、回复顾客或踹车；P 暂停，M 静音</li>
+        </ul>
+      </details>
       <button id="btnStart" class="primary">开始接单</button>
       <button id="btnShop" style="margin-top:10px;width:100%;padding:13px;border:0;border-radius:12px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:700;color:#ffd166;background:rgba(255,209,102,.12);border:1px solid rgba(255,209,102,.28)">🔧 改装店 · 余额 <span id="menuCoins">¥0</span></button>
       <div class="foot">按 <kbd>Enter</kbd> 开始 · <kbd>E</kbd> 催单/接电话/踹车 · <kbd>P</kbd> 暂停 · <kbd>M</kbd> 静音</div>
@@ -182,12 +193,20 @@
       <div class="kicker" id="oRank">收工啦</div>
       <h2>今日收工</h2>
       <div class="stats">
-        <div class="stat"><span id="oMoney">¥0</span><small>到手收入</small></div>
+        <div class="stat"><span id="oMoney">¥0</span><small>净到手</small></div>
         <div class="stat"><span id="oOrders">0</span><small>完成单数</small></div>
       </div>
       <div class="stats">
         <div class="stat bad"><span id="oFines">¥0</span><small>罚款</small></div>
         <div class="stat bad"><span id="oViolations">0</span><small>违章次数</small></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span id="oGross">¥0</span><small>订单流水</small></div>
+        <div class="stat"><span id="oRate">¥0/h</span><small>折算时薪</small></div>
+      </div>
+      <div class="stats">
+        <div class="stat bad"><span id="oWait">0分</span><small>无薪等待</small></div>
+        <div class="stat bad"><span id="oPush">0分</span><small>推车时间</small></div>
       </div>
       <div class="epilogue" id="oEpilogue"></div>
       <button id="btnAgain" class="primary">再来一单</button>
@@ -355,7 +374,10 @@
      状态
   ========================================================= */
   let state = 'menu';
-  let money = 0, ordersDone = 0, lives = 3, combo = 0, bestCombo = 0;
+  let money = 0, grossMoney = 0, unpaidWait = 0, pushSeconds = 0;
+  let autoAccepted = 0;
+  let safeDeliveries = 0, tutorialStep = 0;
+  let ordersDone = 0, lives = 3, combo = 0, bestCombo = 0;
   let fines = 0, violations = 0, falls = 0, complaints = 0, rejects = 0;
   let order = null;
   let cars = [];
@@ -470,7 +492,7 @@
   let shakeT = 0, shakeDur = 1, shakeMag = 0;
   let muted = false;
   let hurryCd = 0;
-  let actionBtn = null, rejectBtn = null;
+  let actionBtn = null, offerButtons = [];
   let msgButtons = [];
   let rushButtons = [];
   let sprintBtn = null;
@@ -494,7 +516,7 @@
   };
   const cam = { x: 0, y: 0, tx: 0, ty: 0 };
 
-  function banner(text) { bannerText = text; bannerT = 2.6; }
+  function banner(text, duration) { bannerText = text; bannerT = duration || 2.6; }
 
   // 玩家当前所在方向（用于判断“我这条路的灯”）
   function playerAxis() {
@@ -842,7 +864,7 @@
     return (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm;
   }
 
-  function newOrder() {
+  function newOrder(showOffer) {
     const pool = buildings.filter((b) => b.type === 'build');
     let from = null, to = null;
     for (let i = 0; i < 400; i++) {
@@ -878,9 +900,11 @@
       from, to,
       pickup: from.door,
       drop: to.door,
-      state: 'pickup',
+      state: showOffer === false ? 'pickup' : 'offer',
+      offerT: showOffer === false ? 0 : 7,
+      routeMeters: Math.round(route / 9),
+      violated: false, crashed: false, fell: false,
       junk,
-      rejectT: junk ? 6 : 0,
       timeLimit,
       timeLeft: timeLimit,
       lastSec: Math.ceil(timeLimit),
@@ -901,8 +925,8 @@
   /* ---------- 爆单：一次给两单让你挑 ---------- */
   function startRush() {
     order = null;
-    const a = newOrder();
-    const b = newOrder();
+    const a = newOrder(false);
+    const b = newOrder(false);
     order = null;
     rush = { options: [a, b], t: 14 };
     sfx('call');
@@ -964,8 +988,27 @@
     return false;
   }
 
+  function acceptOrder(byDefault) {
+    if (!order || order.state !== 'offer') return;
+    order.state = 'pickup';
+    order.timeLeft = order.timeLimit;
+    order.lastSec = Math.ceil(order.timeLimit);
+    sfx('pickup');
+    if (byDefault) {
+      autoAccepted++;
+      mood = clamp(mood - 2, 0, 100);
+      banner('未及时回应 · 系统替你接单');
+    } else {
+      banner('已接单 · 倒计时开始');
+    }
+    if (tutorialStep === 1) {
+      tutorialStep = 2;
+      banner('上手 2/3 · 骑向屏幕边缘箭头；路口后按提示方向走', 8);
+    }
+  }
+
   function rejectOrder() {
-    if (!order || order.rejectT <= 0) return;
+    if (!order || order.state !== 'offer') return;
     const fee = 8;
     fines += fee;
     money = Math.max(0, money - fee);
@@ -973,7 +1016,7 @@
     mood = clamp(mood - 6, 0, 100);
     sfx('fine');
     addText(player.x, player.y - 56, '拒单 · 罚款 ¥' + fee, '#ff8787', 1.05);
-    newOrder();
+    newOrder(true);
   }
 
   function arriveShop() {
@@ -983,6 +1026,10 @@
     order.wait = clamp((1.9 + ordersDone * 0.08) * b + rand(0, 1.6), 1.6, 20);
     order.waitMax = order.wait;
     sfx('bell');
+    if (tutorialStep === 2) {
+      tutorialStep = 3;
+      banner('上手 3/3 · 到店自动取餐；卡餐时倒计时和无薪等待继续', 8);
+    }
     ring(order.pickup.x, order.pickup.y, '#ff9f43');
     if (b >= 1.7) {
       addText(order.pickup.x, order.pickup.y - 44, p.name + ' · 商家忙不过来', p.color, 1.05);
@@ -997,6 +1044,10 @@
     order.nextMsg = rand(4.5, 9);
     order.msg = null;
     sfx('pickup');
+    if (tutorialStep === 3) {
+      tutorialStep = 4;
+      banner('送往蓝色目标 · 守灯、避车、不摔倒可得安全奖', 8);
+    }
     ring(order.pickup.x, order.pickup.y, '#ff9f43');
     burst(order.pickup.x, order.pickup.y, 10, '#ffd8a8', 0.6);
     addText(order.pickup.x, order.pickup.y - 44, '取餐成功', '#ffd8a8');
@@ -1112,9 +1163,16 @@
         order.annoy++;
       }
     }
-    const total = pay + bonus;
+    const safeRun = !order.violated && !order.crashed && !order.fell;
+    const safetyBonus = safeRun ? 4 : 0;
+    const total = pay + bonus + safetyBonus;
+    if (safeRun) {
+      safeDeliveries++;
+      mood = clamp(mood + 2, 0, 100);
+    }
 
     money += total;
+    grossMoney += total;
     ordersDone++;
     sprint = Math.min(100, sprint + 18);
 
@@ -1140,14 +1198,21 @@
     burst(order.drop.x, order.drop.y, 22, '#63e6be', 1);
     addText(order.drop.x, order.drop.y - 44, '+¥' + total, '#8ce99a', 1.4);
     if (bonus > 0) addText(order.drop.x, order.drop.y - 70, '带东西小费 +¥' + bonus, '#ffd166', 0.95, 0.3);
+    if (safetyBonus > 0) addText(order.drop.x, order.drop.y - 94, '安全送达 +¥' + safetyBonus, '#63e6be', 0.95, 0.35);
     if (combo >= 2) addText(order.drop.x, order.drop.y - 72, '连击 x' + combo, '#ffd166', 1.2);
     if (order.annoy >= 2) addText(order.drop.x, order.drop.y - 98, '顾客：下次别接了', '#ff8787', 0.95);
     sfx('deliver');
 
+    if (tutorialStep === 4) {
+      tutorialStep = 0;
+      try { localStorage.setItem('jsw_tutorial_v1', '1'); } catch (e) { /* noop */ }
+      banner('新手引导完成 · 安全送达会增加收入和情绪', 5);
+    }
+
     maybeAddCar();
     updateWeather();
     if (ordersDone % 3 === 0) startRush();
-    else newOrder();
+    else newOrder(true);
   }
 
   function failOrder() {
@@ -1159,7 +1224,7 @@
     const why = order.state === 'waiting' ? '等餐超时 · 差评' : '配送超时 · 差评';
     addText(player.x, player.y - 48, why, '#ff6b6b', 1.5);
     if (lives <= 0) gameOver();
-    else newOrder();
+    else newOrder(true);
   }
 
   function updateWeather() {
@@ -1358,6 +1423,7 @@
 
   function doAction() {
     if (state !== 'playing' || !order) return;
+    if (order.state === 'offer') { acceptOrder(false); return; }
     if (bikeDown > 0) { kickBike(); return; }
     if (order.msg) { replyMsg(); return; }
     if (order.state === 'waiting') hurry();
@@ -1370,11 +1436,14 @@
     if (e.repeat) return;
 
     if (k === 'enter') {
-      if (state === 'menu' || state === 'over') startGame();
+      if (order && order.state === 'offer') acceptOrder(false);
+      else if (state === 'menu' || state === 'over') startGame();
     } else if (k === ' ') {
       trySprint();
     } else if (k === 'e') {
       doAction();
+    } else if (k === 'q' && order && order.state === 'offer') {
+      rejectOrder();
     } else if (k === 'p' || k === 'escape') {
       if (state === 'playing') pauseGame();
       else if (state === 'paused') resumeGame();
@@ -1394,6 +1463,14 @@
 
   canvas.addEventListener('pointerdown', (e) => {
     if (state !== 'playing') return;
+    for (let i = 0; i < offerButtons.length; i++) {
+      const b = offerButtons[i];
+      if (!hitBox(b, e.clientX, e.clientY)) continue;
+      if (b.act === 'accept') acceptOrder(false);
+      else rejectOrder();
+      e.preventDefault();
+      return;
+    }
     for (let i = 0; i < msgButtons.length; i++) {
       const b = msgButtons[i];
       if (hitBox(b, e.clientX, e.clientY)) {
@@ -1405,7 +1482,6 @@
       }
     }
     if (hitBox(actionBtn, e.clientX, e.clientY)) { doAction(); e.preventDefault(); return; }
-    if (hitBox(rejectBtn, e.clientX, e.clientY)) { rejectOrder(); e.preventDefault(); return; }
 
     if (sprintBtn && hitBox(sprintBtn, e.clientX, e.clientY)) { trySprint(); e.preventDefault(); return; }
     for (let i = 0; i < rushButtons.length; i++) {
@@ -1474,6 +1550,7 @@
       player.stun = 1.5;
       player.vx *= 0.15; player.vy *= 0.15;
       if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 2.5);
+      if (order) order.fell = true;
       falls++;
       mood = clamp(mood - 8, 0, 100);
       shake(20);
@@ -1629,6 +1706,7 @@
     player.vy = ny * 420;
 
     if (order) order.timeLeft = Math.max(0.01, order.timeLeft - 1.2);
+    if (order) order.crashed = true;
     mood = clamp(mood - 6, 0, 100);
     shake(15);
     sfx('crash');
@@ -1678,6 +1756,7 @@
     }
 
     violations++;
+    if (order) order.violated = true;
     mood = clamp(mood - 3, 0, 100);
     if (hasPolice(ci, cj)) {
       const key = ci + ',' + cj;
@@ -1841,9 +1920,13 @@
 
   function updateOrder(dt) {
     if (!order) return;
+    if (order.state === 'offer') {
+      order.offerT -= dt;
+      unpaidWait += dt;
+      if (order.offerT <= 0) acceptOrder(true);
+      return;
+    }
     order.timeLeft -= dt;
-    if (order.rejectT > 0) order.rejectT -= dt;
-
     if (order.timeLeft <= 0) { failOrder(); return; }
 
     const secs = Math.ceil(order.timeLeft);
@@ -1858,6 +1941,7 @@
     }
 
     if (order.state === 'waiting') {
+      unpaidWait += dt;
       order.wait -= dt;
       // 卡餐也在磨情绪：等得越久、越是高峰期，掉得越快
       const rate = busyFactor() >= 1.7 ? 3.0 : 1.8;
@@ -1933,6 +2017,7 @@
     clock += dt;
     if (state === 'playing') {
       elapsed += dt;
+      if (pushing) pushSeconds += dt;
       gameMin = (gameMin + dt * CLOCK_SPEED) % 1440;
       updateNight();
       updateWind(dt);
@@ -2090,9 +2175,11 @@
   function drawExtraHUD() {
     sprintBtn = null;
     rushButtons = [];
+    offerButtons = [];
     if (state !== 'playing') return;
 
     // 冲刺按钮 / 充能环
+    if (!order || order.state !== 'offer') {
     const bx = W - 64 * UI, by = H - 200 * UI, r = 30 * UI;
     const ready = sprint >= 100 && sprintT <= 0;
     ctx.save();
@@ -2114,6 +2201,7 @@
     ctx.stroke();
     ctx.restore();
     sprintBtn = { x: bx - r - 8 * UI, y: by - r - 8 * UI, w: r * 2 + 16 * UI, h: r * 2 + 16 * UI };
+    }
 
     // 营业时间 + 时段
     const per = dayPeriod();
@@ -2131,6 +2219,67 @@
     ctx.textBaseline = 'middle';
     ctx.fillText(txt, W - 23 * UI, 104 * UI);
     ctx.textBaseline = 'alphabetic';
+
+    if (order && order.state === 'offer') {
+      const ow = Math.min(390 * UI, W - 28 * UI), oh = 148 * UI;
+      const ox = W / 2 - ow / 2, oy = H * 0.50 - oh / 2;
+      panel(ox, oy, ow, oh, 16 * UI);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#ffd166';
+      ctx.font = '800 ' + (14 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('平台新派一单', ox + 16 * UI, oy + 24 * UI);
+      ctx.textAlign = 'right';
+      ctx.fillStyle = order.offerT <= 3 ? '#ff8787' : '#c3ccd9';
+      ctx.font = '700 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText(Math.ceil(order.offerT) + ' 秒后默认接单', ox + ow - 16 * UI, oy + 24 * UI);
+
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#e8edf5';
+      ctx.font = '700 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('流水 ¥' + order.base + ' 起  ·  路程约 ' + order.routeMeters + ' 米', ox + 16 * UI, oy + 52 * UI);
+      ctx.fillStyle = order.junk ? '#ff8787' : '#9aa4b2';
+      ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText((order.junk ? '低价单  ·  ' : '') + '平台时限 ' + Math.ceil(order.timeLimit) + ' 秒  ·  拒单扣 ¥8', ox + 16 * UI, oy + 73 * UI);
+
+      const gap = 10 * UI, by = oy + 91 * UI, bh = 40 * UI;
+      const acceptW = ow * 0.57, declineW = ow - acceptW - gap - 24 * UI;
+      const accept = { x: ox + 12 * UI, y: by, w: acceptW, h: bh, act: 'accept' };
+      const decline = { x: accept.x + accept.w + gap, y: by, w: declineW, h: bh, act: 'decline' };
+      ctx.fillStyle = 'rgba(255,140,66,0.96)';
+      rr(accept.x, accept.y, accept.w, accept.h, 10 * UI); ctx.fill();
+      ctx.fillStyle = '#20140a';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '800 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('接单  ·  Enter / E', accept.x + accept.w / 2, accept.y + accept.h / 2 + 1);
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      rr(decline.x, decline.y, decline.w, decline.h, 10 * UI); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,135,135,0.55)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#ffb3b3';
+      ctx.fillText('拒单  ·  Q', decline.x + decline.w / 2, decline.y + decline.h / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+      offerButtons = [accept, decline];
+    }
+
+    if (tutorialStep > 0) {
+      const tips = {
+        1: '上手 1/3  ·  Enter / E 接单，Q 拒单；7 秒未回应会默认接单',
+        2: '上手 2/3  ·  跟随边缘箭头与小地图路线；路口后按提示方向走',
+        3: '上手 3/3  ·  进入橙色圈自动取餐；商家等待计入无薪时间',
+        4: '送往蓝色目标  ·  守灯、避车、不摔倒可得 ¥4 安全奖'
+      };
+      const tw = Math.min(500 * UI, W - 24 * UI), th = 38 * UI;
+      const tx = W / 2 - tw / 2, ty = H - 174 * UI;
+      ctx.fillStyle = 'rgba(12,16,24,0.92)';
+      rr(tx, ty, tw, th, 11 * UI); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,184,107,0.48)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#ffb86b';
+      ctx.beginPath(); ctx.arc(tx + 14 * UI, ty + th / 2, 4 * UI, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#e8edf5';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '700 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText(tips[tutorialStep], W / 2 + 6 * UI, ty + th / 2 + 1, tw - 30 * UI);
+      ctx.textBaseline = 'alphabetic';
+    }
 
     // 爆单选单
     if (rush) {
@@ -2761,10 +2910,70 @@
     return kind === 'drop' ? '#4dabf7' : kind === 'errand' ? '#ffd166' : '#ff9f43';
   }
 
+  function guidePathPoints(target) {
+    const cols = XS.length, rows = YS.length, count = cols * rows;
+    const id = (i, j) => j * cols + i;
+    const nearest = (x, y) => {
+      let best = 0, bestDist = Infinity;
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const d = Math.abs(x - XS[i]) + Math.abs(y - YS[j]);
+        if (d < bestDist) { bestDist = d; best = id(i, j); }
+      }
+      return best;
+    };
+    const start = nearest(player.x, player.y), end = nearest(target.x, target.y);
+    const edgeBlocked = (a, b) => {
+      const ax = XS[a % cols], ay = YS[Math.floor(a / cols)];
+      const bx = XS[b % cols], by = YS[Math.floor(b / cols)];
+      return closures.some((c) => {
+        if (ay === by) return ay >= c.y - 3 && ay <= c.y + c.h + 3 &&
+          Math.max(ax, bx) >= c.x && Math.min(ax, bx) <= c.x + c.w;
+        return ax >= c.x - 3 && ax <= c.x + c.w + 3 &&
+          Math.max(ay, by) >= c.y && Math.min(ay, by) <= c.y + c.h;
+      });
+    };
+    const findNodes = (avoidClosures) => {
+      const prev = Array(count).fill(-2), queue = [start];
+      prev[start] = -1;
+      for (let q = 0; q < queue.length && prev[end] === -2; q++) {
+        const n = queue[q], i = n % cols, j = Math.floor(n / cols);
+        const next = [[i, j - 1], [i + 1, j], [i, j + 1], [i - 1, j]];
+        for (const xy of next) {
+          if (xy[0] < 0 || xy[0] >= cols || xy[1] < 0 || xy[1] >= rows) continue;
+          const v = id(xy[0], xy[1]);
+          if (prev[v] !== -2 || (avoidClosures && edgeBlocked(n, v))) continue;
+          prev[v] = n; queue.push(v);
+        }
+      }
+      if (prev[end] === -2) return null;
+      const nodes = [];
+      for (let n = end; n >= 0; n = prev[n]) nodes.push(n);
+      return nodes.reverse();
+    };
+    const nodes = findNodes(true) || findNodes(false) || [start, end];
+    const points = [{ x: player.x, y: player.y }];
+    for (const n of nodes) {
+      const p = { x: XS[n % cols], y: YS[Math.floor(n / cols)] };
+      const last = points[points.length - 1];
+      if (Math.hypot(p.x - last.x, p.y - last.y) > 3) points.push(p);
+    }
+    points.push({ x: target.x, y: target.y });
+    return points;
+  }
+
+  function guideDirection(points) {
+    const a = points[1], b = points[2] || points[points.length - 1];
+    if (!a || !b) return '→';
+    const dx = b.x - a.x, dy = b.y - a.y;
+    if (Math.abs(dx) > Math.abs(dy)) return dx >= 0 ? '→' : '←';
+    return dy >= 0 ? '↓' : '↑';
+  }
+
   function drawGuide() {
     if (!order || state !== 'playing') return;
     const t = orderTarget();
     const col = targetColor(t.kind);
+    const points = guidePathPoints(t);
 
     ctx.save();
     ctx.strokeStyle = hexA(col, 0.34);
@@ -2772,8 +2981,8 @@
     ctx.setLineDash([11, 15]);
     ctx.lineDashOffset = -clock * 46;
     ctx.beginPath();
-    ctx.moveTo(player.x, player.y);
-    ctx.lineTo(t.x, t.y);
+    ctx.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
     ctx.stroke();
     ctx.restore();
   }
@@ -3249,7 +3458,8 @@
     const ratio = clamp(order.timeLeft / order.timeLimit, 0, 1);
     const col = ratio > 0.5 ? '#51cf66' : ratio > 0.25 ? '#fcc419' : '#ff6b6b';
 
-    let label = order.state === 'waiting' ? '等商家出餐'
+    let label = order.state === 'offer' ? '新订单待确认'
+      : order.state === 'waiting' ? '等商家出餐'
       : order.state === 'pickup' ? '前往取餐点' : '送往顾客';
     if (bikeDown > 0) label = '车抛锚了 · 踹两脚';
     const dotCol = (order.state === 'waiting' || bikeDown > 0) ? '#ffb86b' : col;
@@ -3276,7 +3486,9 @@
     ctx.textAlign = 'right';
     ctx.fillStyle = '#9aa4b2';
     ctx.font = '600 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
-    ctx.fillText((order.state === 'waiting' || bikeDown > 0) ? '' : faceWord + ' · ' + meters + ' 米', cx0 + cw - 18 * UI, cy0 + 29 * UI);
+    const targetInfo = order.state === 'offer' ? '约 ' + order.routeMeters + ' 米'
+      : (order.state === 'waiting' || bikeDown > 0) ? '' : faceWord + ' · ' + meters + ' 米';
+    ctx.fillText(targetInfo, cx0 + cw - 18 * UI, cy0 + 29 * UI);
 
     const bx = cx0 + 18 * UI, by = cy0 + 44 * UI;
     const bwid = cw - 36 * UI, bh = 8 * UI;
@@ -3378,7 +3590,6 @@
 
     /* ---- 操作按钮 ---- */
     actionBtn = null;
-    rejectBtn = null;
     let actLabel = null;
     if (bikeDown > 0) actLabel = '踹车';
     else if (order.state === 'waiting') actLabel = '催单';
@@ -3404,23 +3615,6 @@
       actionBtn = { x: ax, y: ay, w: aw, h: ah };
     }
 
-    if (order.junk && order.rejectT > 0 && order.state === 'pickup') {
-      const rw = (narrow ? 130 : 96) * UI, rh = (narrow ? 44 : 34) * UI;
-      const rx = W / 2 - rw / 2;
-      const ry = H - (narrow ? 176 : 158) * UI;
-      ctx.fillStyle = 'rgba(40,20,24,0.9)';
-      rr(rx, ry, rw, rh, 10 * UI); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,107,107,0.6)';
-      ctx.lineWidth = 1.4; ctx.stroke();
-      ctx.fillStyle = '#ff8787';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = '700 ' + (12.5 * UI).toFixed(1) + 'px ' + FONT;
-      ctx.fillText('拒单 -¥8', W / 2, ry + rh / 2 + 1);
-      ctx.textBaseline = 'alphabetic';
-      rejectBtn = { x: rx, y: ry, w: rw, h: rh };
-    }
-
     /* ---- 提示 ---- */
     if (hintT > 0) {
       ctx.globalAlpha = clamp(hintT, 0, 1) * 0.85;
@@ -3428,7 +3622,7 @@
       ctx.textAlign = 'left';
       ctx.font = '600 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
       ctx.fillText(
-        (TOUCH || narrow) ? '拖拽骑行 · 绿色箭头可走 · E 催单/接电话/踹车' : 'WASD 骑行 · 绿色箭头可走 · E 催单/接电话/踹车',
+        (TOUCH || narrow) ? '拖动骑行 · 屏幕边缘寻目标 · 小地图看路线' : 'WASD 骑行 · 屏幕边缘寻目标 · 小地图看路线',
         18 * UI, H - 22 * UI
       );
       ctx.globalAlpha = 1;
@@ -3483,6 +3677,21 @@
       ctx.fillRect(b.g.x, b.g.y, b.g.w, b.g.h);
     }
 
+    let cue = '';
+    if (order && state === 'playing') {
+      const target = orderTarget();
+      const points = guidePathPoints(target);
+      cue = guideDirection(points);
+      ctx.strokeStyle = hexA(targetColor(target.kind), 0.9);
+      ctx.lineWidth = 3 / s;
+      ctx.setLineDash([7 / s, 5 / s]);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     ctx.fillStyle = 'rgba(255,255,255,0.18)';
     for (let i = 0; i < cars.length; i++) {
       const r = carRect(cars[i]);
@@ -3499,6 +3708,17 @@
     ctx.beginPath(); ctx.arc(player.x, player.y, 4 / s, 0, TAU); ctx.fill();
 
     ctx.restore();
+    if (cue) {
+      const cw = Math.min(126 * UI, mw - 4 * UI), ch = 20 * UI;
+      const cx = mx + (mw - cw) / 2, cy = my + 4 * UI;
+      ctx.fillStyle = 'rgba(10,14,20,0.86)';
+      rr(cx, cy, cw, ch, 8 * UI); ctx.fill();
+      ctx.fillStyle = '#e8edf5';
+      ctx.font = '800 ' + (10.5 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('下个路口  ' + cue, cx + cw / 2, cy + ch / 2 + 1);
+      ctx.textBaseline = 'alphabetic';
+    }
   }
 
   function drawOffscreenArrow() {
@@ -3658,6 +3878,10 @@
   const elOrders = document.getElementById('oOrders');
   const elFines = document.getElementById('oFines');
   const elViolations = document.getElementById('oViolations');
+  const elGross = document.getElementById('oGross');
+  const elRate = document.getElementById('oRate');
+  const elWait = document.getElementById('oWait');
+  const elPush = document.getElementById('oPush');
   const elRank = document.getElementById('oRank');
   const elEpilogue = document.getElementById('oEpilogue');
   const btnMute = document.getElementById('btnMute');
@@ -3673,7 +3897,8 @@
   function startGame() {
     hideAll();
     ac();
-    money = 0; ordersDone = 0; lives = 5; combo = 0; bestCombo = 0;
+    money = 0; grossMoney = 0; unpaidWait = 0; pushSeconds = 0; autoAccepted = 0; safeDeliveries = 0;
+    ordersDone = 0; lives = 5; combo = 0; bestCombo = 0;
     fines = 0; violations = 0; falls = 0; complaints = 0; rejects = 0;
     particles.length = 0; texts.length = 0; rings.length = 0;
     stick = null; hurryCd = 0; flashT = 0; bannerT = 0; kickCd = 0;
@@ -3720,6 +3945,9 @@
 
     state = 'playing';
     hintT = 9;
+    try { tutorialStep = localStorage.getItem('jsw_tutorial_v1') === '1' ? 0 : 1; }
+    catch (e) { tutorialStep = 1; }
+    if (tutorialStep === 1) banner('上手 1/3 · Enter / E 接单，Q 拒单；不回应会被默认接单', 8);
     shakeT = 0;
     sfx('start');
   }
@@ -3737,25 +3965,26 @@
   }
 
   function buildEpilogue() {
-    if (falls > 0) {
-      return '雨里摔了一跤，餐没洒。<b>你扶起车，先看了一眼餐箱，才看自己的手。</b>';
-    }
-    if (battery <= 0 || pushing) {
-      return '最后几公里是推回来的。<b>电瓶没电的时候，系统还在催你快点。</b>';
-    }
-    if (fines > 0 && violations > 3) {
-      return '系统算的是送达时间，不算你等红灯的那 90 秒。<b>今天你闯了 ' + violations + ' 次红灯。</b>';
-    }
-    if (rejects > 0) {
-      return '你拒了几单，罚了 ¥' + (rejects * 8) + '。<b>不接，要罚；接了，要命。</b>';
-    }
-    if (complaints > 0) {
-      return '有几单顾客打了电话、发了火。<b>你不是不想快，是路上真的快不了。</b>';
-    }
-    if (lives <= 0) {
-      return '三单超时。你今晚大概不太想看手机。<b>明天还得出车。</b>';
-    }
-    return '今天没出事，只是运气好。<b>路上那么多骑手，靠的多半也是这个。</b>';
+    const events = [];
+    if (autoAccepted > 0) events.push('有 ' + autoAccepted + ' 单你没来得及回应，系统替你按了接单');
+    if (unpaidWait > 5) events.push('派单和商家等餐共 ' + Math.ceil(unpaidWait) + ' 秒，等待没有收入');
+    if (safeDeliveries > 0) events.push('安全送达 ' + safeDeliveries + ' 单，拿到 ¥' + (safeDeliveries * 4) + ' 安全奖');
+    if (falls > 0) events.push('摔倒 ' + falls + ' 次，你扶起车后先看了一眼餐箱，才看自己的手');
+    if (pushSeconds > 8) events.push('推车 ' + Math.ceil(pushSeconds) + ' 秒，电瓶没电时系统还在催你快点');
+    if (violations > 0) events.push('闯红灯 ' + violations + ' 次，系统记得送达时间，不记得你等过几轮红灯');
+    if (rejects > 0) events.push('拒单 ' + rejects + ' 次，扣款 ¥' + (rejects * 8) + '；不接要付钱，接了要赶时间');
+    if (complaints > 0) events.push(complaints + ' 单留下差评，你不是不想快，是路上真的快不了');
+    if (!events.length) events.push('今天没出事，只是运气好。明天还得出车');
+    return '<b>今天跑了 ' + ordersDone + ' 单，订单流水 ¥' + grossMoney + '，扣掉罚款后到手 ¥' + money + '。</b><br>' + events.join('。<br>') + '。';
+  }
+
+  function shortDuration(seconds) {
+    const total = Math.max(0, Math.round(seconds));
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    const secs = total % 60;
+    return (hours ? hours + '小时' : '') + (minutes ? minutes + '分' : '') +
+      (secs || (!hours && !minutes) ? secs + '秒' : '');
   }
 
   function gameOver() {
@@ -3776,10 +4005,16 @@
     const rank = money >= 320 ? '金牌骑手' : money >= 180 ? '熟练骑手' : money >= 80 ? '新手骑手' : '路痴骑手';
     elRank.textContent = rank + ' · 好评 ' + goodReviews + ' / 差评 ' + badReviews;
     if (longWaits > 0) elRank.textContent += ' · 长等餐 ' + longWaits + ' 次';
+    elRank.textContent += ' · 安全送达 ' + safeDeliveries + ' 单';
     elMoney.textContent = '¥' + money;
     elOrders.textContent = String(ordersDone);
     elFines.textContent = '¥' + fines;
     elViolations.textContent = String(violations);
+    const workedHours = Math.max(elapsed * CLOCK_SPEED / 3600, 1 / 60);
+    elGross.textContent = '¥' + grossMoney;
+    elRate.textContent = '¥' + Math.round(money / workedHours) + '/h';
+    elWait.textContent = shortDuration(unpaidWait);
+    elPush.textContent = shortDuration(pushSeconds);
     elEpilogue.innerHTML = buildEpilogue();
     elOver.classList.add('show');
   }
