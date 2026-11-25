@@ -166,7 +166,7 @@
       <div id="menuStory" style="margin:10px 0 14px;padding:10px 12px;border-left:2px solid #ffb86b;background:rgba(255,255,255,.035);border-radius:0 9px 9px 0;text-align:left;color:#c3ccd9;font-size:12px;line-height:1.65"></div>
       <ul class="rules">
         <li><b>WASD</b> / <b>方向键</b> 骑行；手机拖动屏幕左半边。目标箭头会带你走街道并绕开施工</li>
-        <li>新订单有 <b>7 秒</b>选择：Enter / E 接单，Q 拒单（扣 ¥8）；超时后系统默认接单</li>
+        <li>新订单有 <b>10 秒</b>查看订单并选择路线：Enter / E 接单，Q 拒单（扣 ¥8）；超时后系统默认接单</li>
         <li>橙色目标是取餐，蓝色目标是送达；进入目标圈会自动完成，不用停车按键</li>
         <li>守灯、避车、避免摔倒可得 <b>¥4 安全奖</b>；冲刺更快，但风险由你承担</li>
       </ul>
@@ -461,7 +461,7 @@
       best: { money: 0, orders: 0, combo: 0 },
       goals: { date: '', orders: 0, money: 0, combo: 0, claimed: {} },
       careerDay: 0,
-      story: { safeDays: 0, riskyDays: 0, lastEnding: 'new' }
+      story: { safeDays: 0, riskyDays: 0, lastEnding: 'new', lastNote: '' }
     };
   }
 
@@ -478,6 +478,7 @@
         d.story.safeDays = Math.max(0, Number(j.story.safeDays) || 0);
         d.story.riskyDays = Math.max(0, Number(j.story.riskyDays) || 0);
         d.story.lastEnding = typeof j.story.lastEnding === 'string' ? j.story.lastEnding : 'new';
+        d.story.lastNote = typeof j.story.lastNote === 'string' ? j.story.lastNote : '';
       }
       if (j.goals) {
         for (const k in d.goals) if (k !== 'date' && k !== 'claimed') d.goals[k] = Number(j.goals[k]) || 0;
@@ -1002,7 +1003,7 @@
       pickup: from.door,
       drop: to.door,
       state: showOffer === false ? 'pickup' : 'offer',
-      offerT: showOffer === false ? 0 : 7,
+      offerT: showOffer === false ? 0 : 10,
       tier,
       tierLabel: tier === 'long' ? '高价远单' : tier === 'short' ? '低价近单' : '普通订单',
       routes,
@@ -1060,7 +1061,7 @@
     rush = null;
     order = o;
     order.state = 'offer';
-    order.offerT = 7;
+    order.offerT = 10;
     order.timeLeft = 0;
     sfx('pickup');
     banner('爆单订单已选 · 再选路线后接单');
@@ -2455,7 +2456,7 @@
 
     if (tutorialStep > 0) {
       const tips = {
-        1: '上手 1/3  ·  Enter / E 接单，Q 拒单；7 秒未回应会默认接单',
+        1: '上手 1/3  ·  Enter / E 接单，Q 拒单；10 秒未回应会默认接单',
         2: '上手 2/3  ·  跟随边缘箭头与小地图路线；路口后按提示方向走',
         3: '上手 3/3  ·  进入橙色圈自动取餐；商家等待计入无薪时间',
         4: '送往蓝色目标  ·  守灯、避车、不摔倒可得 ¥4 安全奖'
@@ -4191,7 +4192,7 @@
         : previous === 'risky'
           ? '第' + careerDay + '天：昨天的罚单还夹在车筐里，今天的路口又亮起红灯。'
           : previous === 'strained'
-            ? '第' + careerDay + '天：昨天那位催单的顾客又下了单，这次留言写着“路上注意安全”。'
+          ? '第' + careerDay + '天：昨天那位顾客留下了“' + (save.story.lastNote || '路上注意安全') + '”，今天又有新订单。'
             : '第' + careerDay + '天：熟悉的街道又开始派单，车筐里还留着昨天的留言。';
     persist();
     applyUpgrades();
@@ -4266,6 +4267,7 @@
     save.story = save.story || { safeDays: 0, riskyDays: 0, lastEnding: 'new' };
     const ending = violations === 0 && safeDeliveries > 0 ? 'steady' : violations >= 2 ? 'risky' : complaints > 0 ? 'strained' : 'mixed';
     save.story.lastEnding = ending;
+    if (dayNotes.length) save.story.lastNote = dayNotes[dayNotes.length - 1].note;
     if (ending === 'steady') save.story.safeDays++;
     if (ending === 'risky') save.story.riskyDays++;
     save.coins += money;
@@ -4390,7 +4392,7 @@
       const hook = save.story.lastEnding === 'risky' ? '昨天的罚单还在车筐里，今天还要不要抢那盏灯？'
         : save.story.lastEnding === 'strained' ? '昨天催过你的顾客，又留下一条新留言。'
           : save.story.lastEnding === 'steady' ? '昨天安全跑完的经验，能不能帮你撑过今天的高峰？'
-            : '每张订单都会留下留言，连续几天的选择会写进骑手日记。';
+            : (save.story.lastNote ? '昨天最后一位顾客留言：“' + save.story.lastNote + '”' : '每张订单都会留下留言，连续几天的选择会写进骑手日记。');
       story.innerHTML = '<b>骑手日记 · 第 ' + nextDay + ' 天</b><br>' + hook + '<br><span style="color:#8793a5">高价远单更费时耗电；低价近单适合稳妥周转。安全路线多给时间，捷径加价但闯灯会固定罚款并扣时。</span>';
     }
   }
