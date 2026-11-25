@@ -361,6 +361,7 @@
   let cars = [];
   let peds = [];
   let closures = [];
+  let stalls = [];
   let police = [];
   let policePaid = {};
   let goodReviews = 0, badReviews = 0;
@@ -391,6 +392,15 @@
     { name: '面馆', char: '面', color: '#e8b06a' },
     { name: '水果摊', char: '果', color: '#8ce99a' }
   ];
+  const LED_TEXTS = [
+    '极速外卖 · 准时必达',
+    '今日爆单 · 骑手招募中',
+    '雨天慢行 · 注意安全',
+    '满 30 减 8 · 限时',
+    '深夜食堂 · 24 小时',
+    '新店开业 · 第二份半价'
+  ];
+
   const GOALS = [
     { id: 'orders', text: '今日完成 5 单', target: 5, reward: 30 },
     { id: 'money', text: '今日收入 ¥200', target: 200, reward: 30 },
@@ -580,6 +590,9 @@
             roofD: 'hsl(' + hue.toFixed(1) + ' 26% 55%)',
             edge: 'hsl(' + hue.toFixed(1) + ' 30% 42%)',
             details, wins, roofProps,
+            planters: Math.random() < 0.45 ? { edge: randInt(0, 3) } : null,
+            solar: Math.random() < 0.32,
+            led: Math.random() < 0.26 ? { text: pick(LED_TEXTS), ph: rand(0, TAU) } : null,
             sign: shop.color, shop, laundry, hasCat,
             ph: rand(0, TAU),
             door: makeDoor({ g })
@@ -2159,6 +2172,57 @@
     }
   }
 
+  function shopClosed(b) {
+    if (!b.shop) return false;
+    if (b.shop.char === '便' || b.shop.char === '超') return false;   // 24 小时店不关
+    const h = gameMin / 60;
+    return h >= 21 || h < 7;
+  }
+
+  function buildStalls() {
+    stalls = [];
+    const pool = buildings.filter((b) => b.type === 'build');
+    for (let k = 0; k < 7 && pool.length; k++) {
+      const b = pick(pool);
+      const g = b.g;
+      const side = randInt(0, 3);
+      let x, y;
+      if (side === 0) { x = g.x + rand(30, g.w - 30); y = g.y - 24; }
+      else if (side === 1) { x = g.x + g.w + 24; y = g.y + rand(30, g.h - 30); }
+      else if (side === 2) { x = g.x + rand(30, g.w - 30); y = g.y + g.h + 24; }
+      else { x = g.x - 24; y = g.y + rand(30, g.h - 30); }
+      if (Math.hypot(x - START.x, y - START.y) < 140) continue;
+      stalls.push({ x, y, c: pick(['#ff8787', '#ffd166', '#63e6be', '#ffa94d']), ph: rand(0, TAU) });
+    }
+  }
+
+  function drawStalls() {
+    for (let i = 0; i < stalls.length; i++) {
+      const st = stalls[i];
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.ellipse(st.x, st.y + 8, 16, 7, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = '#b45309';
+      rr(st.x - 14, st.y - 8, 28, 16, 4);
+      ctx.fill();
+      ctx.fillStyle = '#f59e0b';
+      rr(st.x - 12, st.y - 6, 24, 12, 3);
+      ctx.fill();
+      ctx.fillStyle = st.c;
+      ctx.beginPath(); ctx.arc(st.x, st.y - 8, 17, Math.PI, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(st.x, st.y - 8, 17, Math.PI, TAU); ctx.stroke();
+      for (let k = 0; k < 3; k++) {
+        const t2 = (clock * 0.45 + k * 0.33 + st.ph) % 1;
+        const yy = st.y - 12 - t2 * 24;
+        ctx.fillStyle = 'rgba(255,255,255,' + ((1 - t2) * 0.34).toFixed(3) + ')';
+        ctx.beginPath();
+        ctx.arc(st.x + Math.sin((t2 * 3 + k) * 2.4) * 5, yy, 3 + t2 * 4.5, 0, TAU);
+        ctx.fill();
+      }
+    }
+  }
+
   function drawProps() {
     for (let i = 0; i < buildings.length; i++) {
       const b = buildings[i];
@@ -2298,44 +2362,128 @@
           }
         }
 
+        // 太阳能板
+        if (b.solar) {
+          ctx.fillStyle = '#1f3b63';
+          rr(g.x + 16, g.y + 14, 40, 24, 3);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(140,200,255,0.55)';
+          ctx.lineWidth = 1;
+          for (let k = 1; k < 4; k++) {
+            const yy = g.y + 14 + k * 6;
+            ctx.beginPath(); ctx.moveTo(g.x + 17, yy); ctx.lineTo(g.x + 55, yy); ctx.stroke();
+          }
+          for (let k = 1; k < 3; k++) {
+            const xx = g.x + 16 + k * 13.3;
+            ctx.beginPath(); ctx.moveTo(xx, g.y + 15); ctx.lineTo(xx, g.y + 37); ctx.stroke();
+          }
+        }
+
+        // 阳台花盆
+        if (b.planters) {
+          const e2 = b.planters.edge;
+          for (let k = 0; k < 3; k++) {
+            const f2 = 0.26 + k * 0.24;
+            let px3, py3;
+            if (e2 === 0) { px3 = g.x + g.w * f2; py3 = g.y + 9; }
+            else if (e2 === 1) { px3 = g.x + g.w - 9; py3 = g.y + g.h * f2; }
+            else if (e2 === 2) { px3 = g.x + g.w * f2; py3 = g.y + g.h - 9; }
+            else { px3 = g.x + 9; py3 = g.y + g.h * f2; }
+            ctx.fillStyle = '#b5651d';
+            rr(px3 - 4, py3 - 3, 8, 7, 2);
+            ctx.fill();
+            ctx.fillStyle = '#4fa964';
+            ctx.beginPath(); ctx.arc(px3, py3 - 4, 3.6, 0, TAU); ctx.fill();
+            ctx.fillStyle = pick(['#ff8787', '#ffd166', '#f7a1c4']);
+            ctx.beginPath(); ctx.arc(px3 + 1.6, py3 - 5.6, 1.5, 0, TAU); ctx.fill();
+          }
+        }
+
+        // LED 广告牌（滚动）
+        if (b.led) {
+          const bw3 = Math.min(g.w * 0.74, 96), bh3 = 16;
+          const bx3 = g.x + (g.w - bw3) / 2, by3 = g.y + g.h - 24;
+          ctx.fillStyle = 'rgba(8,10,16,0.9)';
+          rr(bx3, by3, bw3, bh3, 3);
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(99,230,190,0.5)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.save();
+          rr(bx3 + 2, by3 + 2, bw3 - 4, bh3 - 4, 2);
+          ctx.clip();
+          ctx.font = '800 10px ' + FONT;
+          ctx.fillStyle = '#63e6be';
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'middle';
+          const tw3 = ctx.measureText(b.led.text).width;
+          const span3 = bw3 + tw3 + 16;
+          const off = (clock * 24 + b.led.ph * 30) % span3;
+          ctx.fillText(b.led.text, bx3 + 4 - off, by3 + bh3 / 2 + 1);
+          ctx.fillText(b.led.text, bx3 + 4 - off + span3, by3 + bh3 / 2 + 1);
+          ctx.restore();
+          ctx.textBaseline = 'alphabetic';
+        }
+
         ctx.strokeStyle = b.edge;
         ctx.lineWidth = 2;
         rr(g.x + 0.5, g.y + 0.5, g.w - 1, g.h - 1, 12);
         ctx.stroke();
 
-        // 门头雨棚 + 店招
+        // 门头雨棚 + 店招（打烊的店拉卷帘）
         if (b.door && b.shop) {
           const d = b.door;
           const dx = d.x - (g.x + g.w / 2);
           const dy = d.y - (g.y + g.h / 2);
           const sideX = Math.abs(dx) > Math.abs(dy);
+          const shut = shopClosed(b);
 
-          ctx.fillStyle = hexA(b.shop.color, 0.92);
+          ctx.fillStyle = hexA(b.shop.color, shut ? 0.35 : 0.92);
           if (sideX) rr(dx > 0 ? g.x + g.w - 4 : g.x - 7, d.y - 16, 11, 32, 3);
           else rr(d.x - 16, dy > 0 ? g.y + g.h - 4 : g.y - 7, 32, 11, 3);
           ctx.fill();
 
-          const ox = sideX ? (dx > 0 ? 14 : -14) : 0;
-          const oy = sideX ? 0 : (dy > 0 ? 14 : -14);
-          const gx2 = d.x + ox, gy2 = d.y + oy;
-          ctx.fillStyle = 'rgba(12,16,24,0.85)';
-          rr(gx2 - 12, gy2 - 12, 24, 24, 5);
-          ctx.fill();
-          ctx.fillStyle = hexA(b.shop.color, 0.95);
-          rr(gx2 - 10, gy2 - 10, 20, 20, 4);
-          ctx.fill();
-          ctx.fillStyle = '#1b1205';
-          ctx.font = '800 13px ' + FONT;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(b.shop.char, gx2, gy2 + 1);
-          ctx.textBaseline = 'alphabetic';
-
-          if (night > 0.1) {
-            ctx.fillStyle = hexA(b.shop.color, 0.3 * night);
-            ctx.beginPath();
-            ctx.arc(d.x, d.y, 30 * night + 10, 0, TAU);
+          if (shut) {
+            const sx4 = sideX ? (dx > 0 ? g.x + g.w - 5 : g.x - 9) : d.x - 18;
+            const sy4 = sideX ? d.y - 18 : (dy > 0 ? g.y + g.h - 5 : g.y - 9);
+            ctx.fillStyle = '#8b95a3';
+            if (sideX) rr(sx4, sy4, 14, 36, 2);
+            else rr(sx4, sy4, 36, 14, 2);
             ctx.fill();
+            ctx.strokeStyle = 'rgba(58,66,78,0.7)';
+            ctx.lineWidth = 1;
+            for (let k = 0; k < 5; k++) {
+              if (sideX) {
+                const yy = sy4 + 4 + k * 7;
+                ctx.beginPath(); ctx.moveTo(sx4 + 1, yy); ctx.lineTo(sx4 + 13, yy); ctx.stroke();
+              } else {
+                const xx = sx4 + 4 + k * 7;
+                ctx.beginPath(); ctx.moveTo(xx, sy4 + 1); ctx.lineTo(xx, sy4 + 13); ctx.stroke();
+              }
+            }
+          } else {
+            const ox = sideX ? (dx > 0 ? 14 : -14) : 0;
+            const oy = sideX ? 0 : (dy > 0 ? 14 : -14);
+            const gx2 = d.x + ox, gy2 = d.y + oy;
+            ctx.fillStyle = 'rgba(12,16,24,0.85)';
+            rr(gx2 - 12, gy2 - 12, 24, 24, 5);
+            ctx.fill();
+            ctx.fillStyle = hexA(b.shop.color, 0.95);
+            rr(gx2 - 10, gy2 - 10, 20, 20, 4);
+            ctx.fill();
+            ctx.fillStyle = '#1b1205';
+            ctx.font = '800 13px ' + FONT;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(b.shop.char, gx2, gy2 + 1);
+            ctx.textBaseline = 'alphabetic';
+
+            if (night > 0.1) {
+              ctx.fillStyle = hexA(b.shop.color, 0.3 * night);
+              ctx.beginPath();
+              ctx.arc(d.x, d.y, 30 * night + 10, 0, TAU);
+              ctx.fill();
+            }
           }
         }
 
@@ -3476,6 +3624,7 @@
     drawGround();
     drawBlocks();
     drawProps();
+    drawStalls();
     drawClosures();
     drawLights();
     drawGuide();
@@ -3562,6 +3711,7 @@
     lowBatFlag = false; lowMoodFlag = false;
     buildClosures();
     buildPolice();
+    buildStalls();
 
     spawnCars(9);
     spawnPeds(12);
@@ -3750,6 +3900,7 @@
   resize();
   buildCity();
   addProps();
+  buildStalls();
   buildClosures();
   buildPolice();
   player.x = START.x;
