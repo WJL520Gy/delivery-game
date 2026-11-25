@@ -163,6 +163,7 @@
       <div class="kicker">今日营业中 · 第 1 天</div>
       <h1>极速外卖</h1>
       <div class="sub">骑手日记</div>
+      <div id="menuStory" style="margin:10px 0 14px;padding:10px 12px;border-left:2px solid #ffb86b;background:rgba(255,255,255,.035);border-radius:0 9px 9px 0;text-align:left;color:#c3ccd9;font-size:12px;line-height:1.65"></div>
       <ul class="rules">
         <li><b>WASD</b> / <b>方向键</b> 骑行；手机拖动屏幕左半边。目标箭头会带你走街道并绕开施工</li>
         <li>新订单有 <b>7 秒</b>选择：Enter / E 接单，Q 拒单（扣 ¥8）；超时后系统默认接单</li>
@@ -174,6 +175,8 @@
         <ul class="rules">
           <li>连续工作满 8 小时会强制下线休息 3 小时；每天休息不足 6 小时，疲劳会降低车速与抓地力，并增加摔车风险</li>
           <li>路口斑马线会有行人穿行；接近后减速礼让可得 ¥2，撞到会损失时间和情绪</li>
+          <li>接单时可按 1 选安全绕行，或按 2 选冒险捷径；捷径单价更高，但时限更紧、电量消耗更多</li>
+          <li>闯红灯每次固定罚款 ¥15；交警路口罚 ¥35，并额外损失订单时间、失去安全奖</li>
           <li>一个路口一盏灯；读秒和“下个路口”提示会帮助你判断路线</li>
           <li>商家卡餐不会暂停时限；顾客会催单，也可能请你顺路带东西赚小费</li>
           <li>红灯闯行可能罚款；交警路口处罚更重。撞车、湿滑摔倒会损失时间和情绪</li>
@@ -402,6 +405,7 @@
   let longWaits = 0;
   let lowBatFlag = false, lowMoodFlag = false;
   let graceHint = false;
+  let careerDay = 0, storyIntro = '', dayNotes = [];
   let gameMin = 10 * 60 + 30;   // 营业时间，从上午 10:30 开始
   let workStreakHours = 0;
   let restTodayHours = 6; // 开班前已完成夜间休息
@@ -455,7 +459,9 @@
       coins: 0,
       up: { bat: 0, rain: 0, box: 0, bike: 0 },
       best: { money: 0, orders: 0, combo: 0 },
-      goals: { date: '', orders: 0, money: 0, combo: 0, claimed: {} }
+      goals: { date: '', orders: 0, money: 0, combo: 0, claimed: {} },
+      careerDay: 0,
+      story: { safeDays: 0, riskyDays: 0, lastEnding: 'new' }
     };
   }
 
@@ -467,6 +473,12 @@
       d.coins = Math.max(0, Number(j.coins) || 0);
       for (const k in d.up) d.up[k] = clamp(Number(j.up && j.up[k]) || 0, 0, 3);
       for (const k in d.best) d.best[k] = Number(j.best && j.best[k]) || 0;
+      d.careerDay = Math.max(0, Number(j.careerDay) || 0);
+      if (j.story) {
+        d.story.safeDays = Math.max(0, Number(j.story.safeDays) || 0);
+        d.story.riskyDays = Math.max(0, Number(j.story.riskyDays) || 0);
+        d.story.lastEnding = typeof j.story.lastEnding === 'string' ? j.story.lastEnding : 'new';
+      }
       if (j.goals) {
         for (const k in d.goals) if (k !== 'date' && k !== 'claimed') d.goals[k] = Number(j.goals[k]) || 0;
         if (j.goals.claimed) d.goals.claimed = j.goals.claimed;
@@ -936,34 +948,53 @@
 
   function newOrder(showOffer) {
     const pool = buildings.filter((b) => b.type === 'build');
-    let from = null, to = null;
-    for (let i = 0; i < 400; i++) {
+    const roll = Math.random();
+    const tier = roll < 0.35 ? 'long' : roll < 0.72 ? 'short' : 'standard';
+    let from = null, to = null, centerDist = 0;
+    for (let i = 0; i < 650; i++) {
       from = pick(pool);
       to = pick(pool);
       if (from === to) continue;
-      const d = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
-      if (d > 500) break;
+      centerDist = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
+      if (tier === 'long' && centerDist >= 620) break;
+      if (tier === 'short' && centerDist >= 180 && centerDist <= 500) break;
+      if (tier === 'standard' && centerDist >= 380) break;
     }
     if (from === to) to = pick(pool);
 
     if (!from.door) from.door = makeDoor(from);
     if (!to.door) to.door = makeDoor(to);
 
-    // 系统乱派单：越到后面越容易派垃圾单
+    // 远途单收入高但耗时耗电；近途单单价低，适合稳妥补收入。
     const junkChance = clamp(0.08 + ordersDone * 0.012, 0.08, 0.22);
-    const junk = Math.random() < junkChance && ordersDone >= 2;
-
-    const route =
-      Math.hypot(player.x - from.door.x, player.y - from.door.y) +
-      Math.hypot(from.door.x - to.door.x, from.door.y - to.door.y);
+    const junk = tier !== 'long' && Math.random() < junkChance && ordersDone >= 2;
+    const routes = {
+      safe: routeMetrics(player.x, player.y, from.door.x, from.door.y, 'safe'),
+      shortcut: routeMetrics(player.x, player.y, from.door.x, from.door.y, 'shortcut')
+    };
+    const safeDrop = routeMetrics(from.door.x, from.door.y, to.door.x, to.door.y, 'safe');
+    const shortDrop = routeMetrics(from.door.x, from.door.y, to.door.x, to.door.y, 'shortcut');
+    routes.safe.distance += safeDrop.distance;
+    routes.safe.signals += safeDrop.signals;
+    routes.shortcut.distance += shortDrop.distance;
+    routes.shortcut.signals += shortDrop.signals;
+    routes.safe.meters = Math.round(routes.safe.distance / 9);
+    routes.shortcut.meters = Math.round(routes.shortcut.distance / 9);
+    routes.safe.battery = Math.max(1, Math.ceil(routes.safe.distance * 0.0018));
+    routes.shortcut.battery = Math.max(1, Math.ceil(routes.shortcut.distance * 0.0018));
 
     const diff = clamp(1 - 0.011 * ordersDone, 0.78, 1);
     const busy = busyFactor();
     const period = dayPeriod();
-    const timeLimit = clamp(route / 190 + 28, 35, 90) * diff + (busy - 1) * 7;
-    const centerDist = Math.hypot(from.g.x - to.g.x, from.g.y - to.g.y);
+    for (const key of ['safe', 'shortcut']) {
+      const path = routes[key];
+      const rawLimit = clamp(path.distance / 190 + 28, 35, 90) * diff + (busy - 1) * 7;
+      path.timeLimit = Math.max(28, Math.round(rawLimit + (key === 'safe' ? 8 : -3)));
+    }
     let base = 6 + Math.round(centerDist / 110);
     base = Math.round(base * period.pay * (holiday ? 1.12 : 1));
+    if (tier === 'long') base = Math.round(base * 1.28);
+    if (tier === 'short') base = Math.max(4, Math.round(base * 0.78));
     if (junk) base = Math.max(3, Math.round(base * 0.55));
 
     const o = {
@@ -972,13 +1003,20 @@
       drop: to.door,
       state: showOffer === false ? 'pickup' : 'offer',
       offerT: showOffer === false ? 0 : 7,
-      routeMeters: Math.round(route / 9),
+      tier,
+      tierLabel: tier === 'long' ? '高价远单' : tier === 'short' ? '低价近单' : '普通订单',
+      routes,
+      routeChoice: 'safe',
+      routeMeters: routes.safe.meters,
+      routeSignals: routes.safe.signals,
+      estimatedBattery: routes.safe.battery,
       violated: false, crashed: false, fell: false,
       junk,
-      timeLimit,
-      timeLeft: timeLimit,
-      lastSec: Math.ceil(timeLimit),
+      timeLimit: routes.safe.timeLimit,
+      timeLeft: showOffer === false ? routes.safe.timeLimit : 0,
+      lastSec: Math.ceil(routes.safe.timeLimit),
       base,
+      fareBase: base,
       wait: 0, waitMax: 1,
       nextMsg: 0, msg: null, annoy: 0,
       errand: { active: false, done: false, x: 0, y: 0, fee: 0, wait: 0 },
@@ -990,6 +1028,19 @@
     }
     order = o;
     return o;
+  }
+
+  function chooseRoute(policy) {
+    if (!order || order.state !== 'offer' || !order.routes[policy]) return;
+    order.routeChoice = policy;
+    const route = order.routes[policy];
+    order.routeMeters = route.meters;
+    order.routeSignals = route.signals;
+    order.estimatedBattery = route.battery;
+    order.timeLimit = route.timeLimit;
+    order.timeLeft = 0;
+    order.lastSec = Math.ceil(route.timeLimit);
+    order.base = order.fareBase + (policy === 'shortcut' ? Math.max(2, Math.round(order.fareBase * 0.12)) : 0);
   }
 
   /* ---------- 爆单：一次给两单让你挑 ---------- */
@@ -1008,7 +1059,11 @@
     const o = rush.options[i] || rush.options[0];
     rush = null;
     order = o;
+    order.state = 'offer';
+    order.offerT = 7;
+    order.timeLeft = 0;
     sfx('pickup');
+    banner('爆单订单已选 · 再选路线后接单');
   }
 
   /* ---------- 封路 ---------- */
@@ -1263,6 +1318,19 @@
       checkGoals();
     }
     if (order.annoy >= 2) complaints++;
+    const note = order.annoy >= 2
+      ? '顾客留言：餐是收到了，但等得太久了。希望下次不用一直催你。'
+      : order.crashed || order.fell
+        ? '顾客留言：辛苦了，路上慢一点，安全到就好。'
+        : order.violated
+          ? '顾客留言：谢谢送到。下次别为了我闯红灯，晚一点也没关系。'
+          : order.tier === 'long'
+            ? '顾客留言：跑这么远还送得很稳，饭都还是热的。'
+            : order.tier === 'short'
+              ? '顾客留言：谢谢你稳稳送来，辛苦啦。'
+              : '顾客留言：收到啦，今天这份准时又完整。';
+    order.customerNote = note;
+    dayNotes.push({ day: careerDay, note: note.replace('顾客留言：', ''), tier: order.tierLabel });
 
     ring(order.drop.x, order.drop.y, '#63e6be');
     burst(order.drop.x, order.drop.y, 22, '#63e6be', 1);
@@ -1272,6 +1340,7 @@
     if (combo >= 2) addText(order.drop.x, order.drop.y - 72, '连击 x' + combo, '#ffd166', 1.2);
     if (order.annoy >= 2) addText(order.drop.x, order.drop.y - 98, '顾客：下次别接了', '#ff8787', 0.95);
     sfx('deliver');
+    banner(note, 5);
 
     if (tutorialStep === 4) {
       tutorialStep = 0;
@@ -1508,6 +1577,8 @@
     if (k === 'enter') {
       if (order && order.state === 'offer') acceptOrder(false);
       else if (state === 'menu' || state === 'over') startGame();
+    } else if ((k === '1' || k === '2') && order && order.state === 'offer') {
+      chooseRoute(k === '1' ? 'safe' : 'shortcut');
     } else if (k === ' ') {
       trySprint();
     } else if (k === 'e') {
@@ -1537,7 +1608,8 @@
       const b = offerButtons[i];
       if (!hitBox(b, e.clientX, e.clientY)) continue;
       if (b.act === 'accept') acceptOrder(false);
-      else rejectOrder();
+      else if (b.act === 'decline') rejectOrder();
+      else chooseRoute(b.act);
       e.preventDefault();
       return;
     }
@@ -1826,30 +1898,20 @@
     }
 
     violations++;
-    if (order) order.violated = true;
-    mood = clamp(mood - 3, 0, 100);
-    if (hasPolice(ci, cj)) {
-      const key = ci + ',' + cj;
-      if (!policePaid[key]) {
-        policePaid[key] = true;
-        const f = 20;
-        fines += f;
-        money = Math.max(0, money - f);
-        shake(10);
-        sfx('fine');
-        addText(player.x, player.y - 50, '交警查车 · 罚款 ¥' + f, '#ff6b6b', 1.2);
-        return;
-      }
+    if (order) {
+      order.violated = true;
+      if (order.state !== 'offer') order.timeLeft = Math.max(0, order.timeLeft - 3);
     }
-    if (Math.random() < 0.18) {
-      const f = 10;
-      fines += f;
-      money = Math.max(0, money - f);
-      addText(player.x, player.y - 50, '闯红灯 · 罚款 ¥' + f, '#ff8787', 1.05);
-      sfx('fine');
-    } else {
-      addText(player.x, player.y - 50, '闯红灯', '#ffa94d', 1.0);
-    }
+    mood = clamp(mood - 5, 0, 100);
+    const key = ci + ',' + cj;
+    const police = hasPolice(ci, cj);
+    const f = police && !policePaid[key] ? 35 : 15;
+    policePaid[key] = true;
+    fines += f;
+    money = Math.max(0, money - f);
+    shake(police ? 10 : 6);
+    sfx('fine');
+    addText(player.x, player.y - 50, '闯红灯 -¥' + f + ' · 时限 -3秒 · 安全奖取消', '#ff6b6b', 1.2);
   }
 
   function updateBike(dt) {
@@ -2313,7 +2375,8 @@
 
     // 营业时间 + 时段
     const per = dayPeriod();
-    const txt = clockText() + ' · ' + per.name + (holiday ? ' · 节假日' : '');
+    const routeLabel = order && order.state !== 'offer' ? (order.routeChoice === 'shortcut' ? '冒险捷径' : '安全绕行') : '';
+    const txt = clockText() + ' · ' + (routeLabel ? routeLabel + ' · ' : '') + per.name + (holiday ? ' · 节假日' : '');
     ctx.font = '800 ' + (12 * UI).toFixed(1) + 'px ' + FONT;
     const tw2 = ctx.measureText(txt).width + 22 * UI;
     ctx.fillStyle = 'rgba(10,14,20,0.72)';
@@ -2329,13 +2392,13 @@
     ctx.textBaseline = 'alphabetic';
 
     if (order && order.state === 'offer') {
-      const ow = Math.min(390 * UI, W - 28 * UI), oh = 148 * UI;
+      const ow = Math.min(420 * UI, W - 24 * UI), oh = 196 * UI;
       const ox = W / 2 - ow / 2, oy = H * 0.50 - oh / 2;
       panel(ox, oy, ow, oh, 16 * UI);
       ctx.textAlign = 'left';
-      ctx.fillStyle = '#ffd166';
+      ctx.fillStyle = order.tier === 'long' ? '#ffd166' : order.tier === 'short' ? '#8ce99a' : '#ffd166';
       ctx.font = '800 ' + (14 * UI).toFixed(1) + 'px ' + FONT;
-      ctx.fillText('平台新派一单', ox + 16 * UI, oy + 24 * UI);
+      ctx.fillText(order.tierLabel + (order.junk ? ' · 低价陷阱' : ''), ox + 16 * UI, oy + 24 * UI);
       ctx.textAlign = 'right';
       ctx.fillStyle = order.offerT <= 3 ? '#ff8787' : '#c3ccd9';
       ctx.font = '700 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
@@ -2344,12 +2407,34 @@
       ctx.textAlign = 'left';
       ctx.fillStyle = '#e8edf5';
       ctx.font = '700 ' + (13 * UI).toFixed(1) + 'px ' + FONT;
-      ctx.fillText('流水 ¥' + order.base + ' 起  ·  路程约 ' + order.routeMeters + ' 米', ox + 16 * UI, oy + 52 * UI);
+      ctx.fillText('预计流水 ¥' + order.base + ' 起  ·  路程约 ' + order.routeMeters + ' 米  ·  耗电约 ' + order.estimatedBattery + '%', ox + 16 * UI, oy + 52 * UI);
       ctx.fillStyle = order.junk ? '#ff8787' : '#9aa4b2';
       ctx.font = '600 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
-      ctx.fillText((order.junk ? '低价单  ·  ' : '') + '平台时限 ' + Math.ceil(order.timeLimit) + ' 秒  ·  拒单扣 ¥8', ox + 16 * UI, oy + 73 * UI);
+      ctx.fillText('平台时限 ' + Math.ceil(order.timeLimit) + ' 秒 · 预计经过 ' + order.routeSignals + ' 个信号路口', ox + 16 * UI, oy + 72 * UI);
 
-      const gap = 10 * UI, by = oy + 91 * UI, bh = 40 * UI;
+      const gap = 8 * UI, routeY = oy + 82 * UI, routeH = 45 * UI;
+      const routeW = (ow - 32 * UI - gap) / 2;
+      const safeBtn = { x: ox + 12 * UI, y: routeY, w: routeW, h: routeH, act: 'safe' };
+      const shortBtn = { x: safeBtn.x + routeW + gap, y: routeY, w: routeW, h: routeH, act: 'shortcut' };
+      ctx.fillStyle = order.routeChoice === 'safe' ? 'rgba(99,230,190,0.22)' : 'rgba(255,255,255,0.07)';
+      rr(safeBtn.x, safeBtn.y, safeBtn.w, safeBtn.h, 9 * UI); ctx.fill();
+      ctx.strokeStyle = order.routeChoice === 'safe' ? '#63e6be' : 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.stroke();
+      ctx.fillStyle = '#b2f2dd'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = '800 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('1 安全绕行 · +8秒', safeBtn.x + routeW / 2, safeBtn.y + 14 * UI);
+      ctx.font = '600 ' + (9 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('避开灯口 · 不加价', safeBtn.x + routeW / 2, safeBtn.y + 32 * UI);
+
+      ctx.fillStyle = order.routeChoice === 'shortcut' ? 'rgba(255,135,135,0.22)' : 'rgba(255,255,255,0.07)';
+      rr(shortBtn.x, shortBtn.y, routeW, routeH, 9 * UI); ctx.fill();
+      ctx.strokeStyle = order.routeChoice === 'shortcut' ? '#ff8787' : 'rgba(255,255,255,0.12)'; ctx.stroke();
+      ctx.fillStyle = '#ffc9c9'; ctx.font = '800 ' + (11 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('2 冒险捷径 · +12%', shortBtn.x + routeW / 2, shortBtn.y + 14 * UI);
+      ctx.font = '600 ' + (9 * UI).toFixed(1) + 'px ' + FONT;
+      ctx.fillText('时限更紧 · 闯灯罚 ¥15/35', shortBtn.x + routeW / 2, shortBtn.y + 32 * UI);
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+
+      const by = oy + 139 * UI, bh = 43 * UI;
       const acceptW = ow * 0.57, declineW = ow - acceptW - gap - 24 * UI;
       const accept = { x: ox + 12 * UI, y: by, w: acceptW, h: bh, act: 'accept' };
       const decline = { x: accept.x + accept.w + gap, y: by, w: declineW, h: bh, act: 'decline' };
@@ -2365,7 +2450,7 @@
       ctx.fillStyle = '#ffb3b3';
       ctx.fillText('拒单  ·  Q', decline.x + decline.w / 2, decline.y + decline.h / 2 + 1);
       ctx.textBaseline = 'alphabetic';
-      offerButtons = [accept, decline];
+      offerButtons = [safeBtn, shortBtn, accept, decline];
     }
 
     if (tutorialStep > 0) {
@@ -3047,7 +3132,7 @@
     return kind === 'drop' ? '#4dabf7' : kind === 'errand' ? '#ffd166' : '#ff9f43';
   }
 
-  function guidePathPoints(target) {
+  function routeMetrics(startX, startY, targetX, targetY, policy) {
     const cols = XS.length, rows = YS.length, count = cols * rows;
     const id = (i, j) => j * cols + i;
     const nearest = (x, y) => {
@@ -3058,7 +3143,7 @@
       }
       return best;
     };
-    const start = nearest(player.x, player.y), end = nearest(target.x, target.y);
+    const start = nearest(startX, startY), end = nearest(targetX, targetY);
     const edgeBlocked = (a, b) => {
       const ax = XS[a % cols], ay = YS[Math.floor(a / cols)];
       const bx = XS[b % cols], by = YS[Math.floor(b / cols)];
@@ -3069,33 +3154,51 @@
           Math.max(ay, by) >= c.y && Math.min(ay, by) <= c.y + c.h;
       });
     };
-    const findNodes = (avoidClosures) => {
-      const prev = Array(count).fill(-2), queue = [start];
-      prev[start] = -1;
-      for (let q = 0; q < queue.length && prev[end] === -2; q++) {
-        const n = queue[q], i = n % cols, j = Math.floor(n / cols);
-        const next = [[i, j - 1], [i + 1, j], [i, j + 1], [i - 1, j]];
-        for (const xy of next) {
-          if (xy[0] < 0 || xy[0] >= cols || xy[1] < 0 || xy[1] >= rows) continue;
-          const v = id(xy[0], xy[1]);
-          if (prev[v] !== -2 || (avoidClosures && edgeBlocked(n, v))) continue;
-          prev[v] = n; queue.push(v);
-        }
+    const dist = Array(count).fill(Infinity), prev = Array(count).fill(-1), seen = Array(count).fill(false);
+    dist[start] = 0;
+    for (let step = 0; step < count; step++) {
+      let n = -1;
+      for (let k = 0; k < count; k++) if (!seen[k] && (n < 0 || dist[k] < dist[n])) n = k;
+      if (n < 0 || !Number.isFinite(dist[n]) || n === end) break;
+      seen[n] = true;
+      const i = n % cols, j = Math.floor(n / cols);
+      let next = [[i, j - 1], [i + 1, j], [i, j + 1], [i - 1, j]];
+      if (policy === 'shortcut') {
+        next.sort((a, b) => (Math.abs(a[0] - end % cols) + Math.abs(a[1] - Math.floor(end / cols))) -
+          (Math.abs(b[0] - end % cols) + Math.abs(b[1] - Math.floor(end / cols))));
       }
-      if (prev[end] === -2) return null;
-      const nodes = [];
-      for (let n = end; n >= 0; n = prev[n]) nodes.push(n);
-      return nodes.reverse();
-    };
-    const nodes = findNodes(true) || findNodes(false) || [start, end];
-    const points = [{ x: player.x, y: player.y }];
+      for (const xy of next) {
+        if (xy[0] < 0 || xy[0] >= cols || xy[1] < 0 || xy[1] >= rows) continue;
+        const v = id(xy[0], xy[1]);
+        if (edgeBlocked(n, v)) continue;
+        const edge = Math.hypot(XS[i] - XS[xy[0]], YS[j] - YS[xy[1]]);
+        const signalPenalty = policy === 'safe' && v !== end && isSignal(xy[0], xy[1]) ? 420 : 0;
+        const candidate = dist[n] + edge + signalPenalty;
+        if (candidate < dist[v]) { dist[v] = candidate; prev[v] = n; }
+      }
+      seen[n] = true;
+    }
+    const nodes = [];
+    if (start === end) nodes.push(start);
+    else if (prev[end] >= 0) for (let n = end; n >= 0; n = prev[n]) nodes.push(n);
+    if (nodes.length) nodes.reverse();
+    else nodes.push(start, end);
+    const points = [{ x: startX, y: startY }];
     for (const n of nodes) {
       const p = { x: XS[n % cols], y: YS[Math.floor(n / cols)] };
       const last = points[points.length - 1];
       if (Math.hypot(p.x - last.x, p.y - last.y) > 3) points.push(p);
     }
-    points.push({ x: target.x, y: target.y });
-    return points;
+    points.push({ x: targetX, y: targetY });
+    let distance = 0;
+    for (let k = 1; k < points.length; k++) distance += Math.hypot(points[k].x - points[k - 1].x, points[k].y - points[k - 1].y);
+    let signals = 0;
+    for (let k = 1; k < nodes.length - 1; k++) if (isSignal(nodes[k] % cols, Math.floor(nodes[k] / cols))) signals++;
+    return { points, distance, signals };
+  }
+
+  function guidePathPoints(target) {
+    return routeMetrics(player.x, player.y, target.x, target.y, order ? order.routeChoice : 'safe').points;
   }
 
   function guideDirection(points) {
@@ -3109,7 +3212,7 @@
   function drawGuide() {
     if (!order || state !== 'playing') return;
     const t = orderTarget();
-    const col = targetColor(t.kind);
+    const col = order.routeChoice === 'shortcut' ? '#ff8787' : '#63e6be';
     const points = guidePathPoints(t);
 
     ctx.save();
@@ -4077,6 +4180,20 @@
     setWeather(r < 0.42 ? 'clear' : r < 0.58 ? 'heat' : r < 0.76 ? 'rain' : r < 0.9 ? 'snow' : 'wind', true);
 
     loadSave();
+    careerDay = (save.careerDay || 0) + 1;
+    save.careerDay = careerDay;
+    dayNotes = [];
+    const previous = save.story.lastEnding;
+    storyIntro = careerDay === 1
+      ? '第一天：老骑手把备用雨衣塞给你：“先把自己平安带回去，单子明天还有。”'
+      : previous === 'steady'
+        ? '第' + careerDay + '天：昨天你坚持等灯。老骑手说，稳稳跑完一天也是本事。'
+        : previous === 'risky'
+          ? '第' + careerDay + '天：昨天的罚单还夹在车筐里，今天的路口又亮起红灯。'
+          : previous === 'strained'
+            ? '第' + careerDay + '天：昨天那位催单的顾客又下了单，这次留言写着“路上注意安全”。'
+            : '第' + careerDay + '天：熟悉的街道又开始派单，车筐里还留着昨天的留言。';
+    persist();
     applyUpgrades();
     sprint = 0; sprintT = 0; rush = null;
     policePaid = {};
@@ -4097,6 +4214,7 @@
     try { tutorialStep = localStorage.getItem('jsw_tutorial_v1') === '1' ? 0 : 1; }
     catch (e) { tutorialStep = 1; }
     if (tutorialStep === 1) banner('上手 1/3 · Enter / E 接单，Q 拒单；不回应会被默认接单', 8);
+    else banner(storyIntro, 7);
     shakeT = 0;
     sfx('start');
   }
@@ -4125,7 +4243,9 @@
     if (complaints > 0) events.push(complaints + ' 单留下差评，你不是不想快，是路上真的快不了');
     events.push('今日累计休息 ' + Math.min(restTodayHours, 24).toFixed(1) + ' 小时' + (restTodayHours < 6 ? '，未达到 6 小时，疲劳已降低车速并增加湿滑摔车风险' : '，达到每日 6 小时休息标准'));
     if (!events.length) events.push('今天没出事，只是运气好。明天还得出车');
-    return '<b>今天跑了 ' + ordersDone + ' 单，订单流水 ¥' + grossMoney + '，扣掉罚款后到手 ¥' + money + '。</b><br>' + events.join('。<br>') + '。';
+    const notes = dayNotes.slice(-3).map((n) => '第' + n.day + '天·' + n.tier + '结单后，' + n.note);
+    if (notes.length) events.push('顾客留言留在今天的日记里：<br>“' + notes.join('”<br>“') + '”');
+    return '<b>第' + careerDay + '天：跑了 ' + ordersDone + ' 单，订单流水 ¥' + grossMoney + '，扣掉罚款后到手 ¥' + money + '。</b><br>' + events.join('。<br>') + '。';
   }
 
   function shortDuration(seconds) {
@@ -4143,6 +4263,11 @@
     sfx('over');
 
     if (!save) loadSave();
+    save.story = save.story || { safeDays: 0, riskyDays: 0, lastEnding: 'new' };
+    const ending = violations === 0 && safeDeliveries > 0 ? 'steady' : violations >= 2 ? 'risky' : complaints > 0 ? 'strained' : 'mixed';
+    save.story.lastEnding = ending;
+    if (ending === 'steady') save.story.safeDays++;
+    if (ending === 'risky') save.story.riskyDays++;
     save.coins += money;
     if (money > save.best.money) save.best.money = money;
     if (ordersDone > save.best.orders) save.best.orders = ordersDone;
@@ -4256,6 +4381,17 @@
     if (b) {
       b.innerHTML = '最佳记录 · 收入 ¥' + save.best.money +
         ' · 完成 ' + save.best.orders + ' 单 · 连击 ' + save.best.combo;
+    }
+    const kicker = document.querySelector('.kicker');
+    if (kicker) kicker.textContent = '今日营业中 · 下一章 第 ' + ((save.careerDay || 0) + 1) + ' 天';
+    const story = document.getElementById('menuStory');
+    if (story) {
+      const nextDay = (save.careerDay || 0) + 1;
+      const hook = save.story.lastEnding === 'risky' ? '昨天的罚单还在车筐里，今天还要不要抢那盏灯？'
+        : save.story.lastEnding === 'strained' ? '昨天催过你的顾客，又留下一条新留言。'
+          : save.story.lastEnding === 'steady' ? '昨天安全跑完的经验，能不能帮你撑过今天的高峰？'
+            : '每张订单都会留下留言，连续几天的选择会写进骑手日记。';
+      story.innerHTML = '<b>骑手日记 · 第 ' + nextDay + ' 天</b><br>' + hook + '<br><span style="color:#8793a5">高价远单更费时耗电；低价近单适合稳妥周转。安全路线多给时间，捷径加价但闯灯会固定罚款并扣时。</span>';
     }
   }
   document.getElementById('btnStart').addEventListener('click', startGame);
